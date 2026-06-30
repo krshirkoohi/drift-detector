@@ -1,0 +1,10 @@
+# Drift Detector Python Dependencies
+#
+# The MVP is designed with zero external dependencies, using only python built-ins (urllib).
+# No packages are strictly required to run `cli_agent.py`!
+#
+# Future components (scipy, sentence-transformers, etc.) can be added here.
+#
+# To install developer tools:
+# black
+# flake8

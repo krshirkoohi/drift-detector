@@ -1,0 +1,9 @@
+{
+  "name": "default",
+  "description": "Default specification baseline of high-quality agent outputs",
+  "examples": [
+    "Here is a clear and concise analysis of the project requirements, identifying the core MVP components, functional stories, and non-functional bounds. We have established that tracking embedding distance against a fixed baseline centroid is our primary metric.",
+    "The statistical validation plan compares fresh-context baseline output against a saturated, off-topic pollutant context to calibrate the cosine distance threshold. Page-Hinkley and Kolmogorov-Smirnov tests will be evaluated in future iterations.",
+    "Our design prioritises low runtime overhead, using lightweight sentence embeddings to calculate cosine similarity. If the similarity drops below our pre-calibrated threshold, an inline notice is emitted immediately in the CLI session."
+  ]
+}
