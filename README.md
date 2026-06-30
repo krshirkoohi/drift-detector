@@ -1,3 +1,5 @@
+<img width="1200" height="896" alt="image" src="https://github.com/user-attachments/assets/0ff95ab7-9222-41b4-828c-ee326905bd83" />
+
 # Drift Detector
 
 Drift Detector uses tried and tested statistical techniques to keep your LLM agent at peak performance. It monitors the output of your agent sessions, measuring semantic drift to warn you when responses begin degrading as the context window fills.
