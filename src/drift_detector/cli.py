@@ -8,7 +8,7 @@ from .detector import DriftDetector
 
 def generate_gemini_response(prompt: str, history: List[Dict[str, Any]], api_key: str) -> str:
     """Send chat request to Gemini API via urllib."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     # Format contents with conversation history
     contents = []
