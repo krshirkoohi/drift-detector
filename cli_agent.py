@@ -19,12 +19,18 @@ def main():
         "--threshold",
         type=float,
         default=0.25,
-        help="Cosine distance threshold for triggering drift warnings (default: 0.25)"
+        help="Distance threshold for triggering drift warnings (default: 0.25)"
+    )
+    parser.add_argument(
+        "--metric",
+        choices=["cosine", "euclidean"],
+        default="cosine",
+        help="Distance metric to use for drift calculation (default: cosine)"
     )
     
     args = parser.parse_args()
     
-    run_cli_agent(args.baseline, args.threshold)
+    run_cli_agent(args.baseline, args.threshold, args.metric)
 
 if __name__ == "__main__":
     main()

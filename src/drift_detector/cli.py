@@ -39,7 +39,7 @@ def generate_gemini_response(prompt: str, history: List[Dict[str, Any]], api_key
     except Exception as e:
         raise RuntimeError(f"Gemini API request failed: {e}")
 
-def run_cli_agent(baseline_file: str, threshold: float = 0.25) -> None:
+def run_cli_agent(baseline_file: str, threshold: float = 0.25, metric: str = "cosine") -> None:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("❌ Error: GEMINI_API_KEY environment variable is not set.")
@@ -56,10 +56,11 @@ def run_cli_agent(baseline_file: str, threshold: float = 0.25) -> None:
             baseline_store=store,
             api_key=api_key,
             threshold=threshold,
+            metric=metric,
             log_dir=os.path.join(os.path.dirname(baseline_file), "..", "data")
         )
         print("✅ Baseline centroid calculated successfully.")
-        print(f"✅ Drift detector active (Threshold: {threshold}).")
+        print(f"✅ Drift detector active (Metric: {metric}, Threshold: {threshold}).")
     except Exception as e:
         print(f"❌ Error during initialisation: {e}")
         sys.exit(1)
@@ -94,7 +95,9 @@ def run_cli_agent(baseline_file: str, threshold: float = 0.25) -> None:
             if metrics["is_drifting"]:
                 print("\n" + "=" * 52)
                 print(f"⚠️  DRIFT DETECTED: Output has drifted from baseline spec!")
+                print(f"   Active Metric:   {metrics['metric'].upper()}")
                 print(f"   Cosine Distance: {metrics['cosine_distance']:.4f}")
+                print(f"   Euclid Distance: {metrics['euclidean_distance']:.4f}")
                 print(f"   Threshold:       {metrics['threshold']:.4f}")
                 print(f"   Analysis Latency: {metrics['latency_ms']:.1f}ms")
                 print("=" * 52 + "\n")
