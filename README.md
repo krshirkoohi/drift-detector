@@ -1,4 +1,4 @@
-<img width="1200" height="896" alt="image" src="https://github.com/user-attachments/assets/0ff95ab7-9222-41b4-828c-ee326905bd83" />
+<img width="1200" height="896" alt="image" src="https://github.com/user-attachments/assets/2009e4a9-c53b-496d-852a-73d9e3302c50" />
 
 # Drift Detector
 
