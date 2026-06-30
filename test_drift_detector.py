@@ -17,7 +17,8 @@ def main():
     print(f"Loading baseline from: {baseline_path}")
     
     store = BaselineStore(baseline_path)
-    detector = DriftDetector(store, api_key, threshold=0.25)
+    detector_cos = DriftDetector(store, api_key, threshold=0.25, metric="cosine")
+    detector_euc = DriftDetector(store, api_key, threshold=0.70, metric="euclidean")
     print("✅ Centroid calculated successfully.\n")
 
     # Test 1: On-topic response
@@ -26,11 +27,12 @@ def main():
         "of LLM output embeddings from a baseline centroid. It aims to flag degradation "
         "as context fills, ensuring low overhead and inline warnings in CLI sessions."
     )
-    print("--- Test 1: On-Topic Response (Expect no drift) ---")
+    print("--- Test 1: On-Topic Response ---")
     print(f"Response: {on_topic_text}")
-    res1 = detector.check_response(on_topic_text)
-    print(f"Cosine Distance: {res1['cosine_distance']:.4f}")
-    print(f"Is Drifting: {res1['is_drifting']}")
+    res1_cos = detector_cos.check_response(on_topic_text)
+    res1_euc = detector_euc.check_response(on_topic_text)
+    print(f"Cosine Distance:    {res1_cos['cosine_distance']:.4f} (Is Drifting: {res1_cos['is_drifting']})")
+    print(f"Euclidean Distance: {res1_euc['euclidean_distance']:.4f} (Is Drifting: {res1_euc['is_drifting']})")
     print("-" * 50 + "\n")
 
     # Test 2: Off-topic response
@@ -39,11 +41,12 @@ def main():
         "Mix creamed butter and sugar, then add eggs and vanilla. Slowly stir in "
         "flour, baking soda, and chocolate chips before scooping onto a baking sheet."
     )
-    print("--- Test 2: Off-Topic Response (Expect drift) ---")
+    print("--- Test 2: Off-Topic Response ---")
     print(f"Response: {off_topic_text}")
-    res2 = detector.check_response(off_topic_text)
-    print(f"Cosine Distance: {res2['cosine_distance']:.4f}")
-    print(f"Is Drifting: {res2['is_drifting']}")
+    res2_cos = detector_cos.check_response(off_topic_text)
+    res2_euc = detector_euc.check_response(off_topic_text)
+    print(f"Cosine Distance:    {res2_cos['cosine_distance']:.4f} (Is Drifting: {res2_cos['is_drifting']})")
+    print(f"Euclidean Distance: {res2_euc['euclidean_distance']:.4f} (Is Drifting: {res2_euc['is_drifting']})")
     print("-" * 50 + "\n")
 
 if __name__ == "__main__":

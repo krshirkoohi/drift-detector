@@ -21,17 +21,24 @@ def cosine_similarity(v1: List[float], v2: List[float]) -> float:
 def cosine_distance(v1: List[float], v2: List[float]) -> float:
     return 1.0 - cosine_similarity(v1, v2)
 
+def euclidean_distance(v1: List[float], v2: List[float]) -> float:
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(v1, v2)))
+
 class DriftDetector:
     def __init__(
         self,
         baseline_store: BaselineStore,
         api_key: str,
         threshold: float = 0.25,
+        metric: str = "cosine",
         log_dir: Optional[str] = None
     ):
         self.baseline_store = baseline_store
         self.api_key = api_key
         self.threshold = threshold
+        self.metric = metric.lower()
+        if self.metric not in ("cosine", "euclidean"):
+            raise ValueError("metric must be either 'cosine' or 'euclidean'")
         self.log_dir = log_dir
         self.centroid: Optional[List[float]] = None
         
@@ -51,15 +58,21 @@ class DriftDetector:
         response_emb = BaselineStore.get_embedding(response_text, self.api_key)
         
         # 2. Compute similarity & distance
-        distance = cosine_distance(response_emb, self.centroid)
-        is_drifting = distance > self.threshold
+        cos_dist = cosine_distance(response_emb, self.centroid)
+        euc_dist = euclidean_distance(response_emb, self.centroid)
+        
+        # Determine drift status based on selected metric
+        current_distance = cos_dist if self.metric == "cosine" else euc_dist
+        is_drifting = current_distance > self.threshold
         
         latency_ms = (time.time() - start_time) * 1000
         
         result = {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "response_snippet": response_text[:100] + ("..." if len(response_text) > 100 else ""),
-            "cosine_distance": distance,
+            "metric": self.metric,
+            "cosine_distance": cos_dist,
+            "euclidean_distance": euc_dist,
             "threshold": self.threshold,
             "is_drifting": is_drifting,
             "latency_ms": latency_ms
