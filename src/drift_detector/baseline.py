@@ -2,6 +2,7 @@ import json
 import os
 import urllib.request
 from typing import List, Optional
+import numpy as np
 
 class BaselineStore:
     def __init__(self, baseline_path: str):
@@ -9,7 +10,8 @@ class BaselineStore:
         self.name: str = "default"
         self.description: str = ""
         self.examples: List[str] = []
-        self.centroid: Optional[List[float]] = None
+        self.embeddings: Optional[np.ndarray] = None
+        self.centroid: Optional[np.ndarray] = None
         self.load_baseline()
 
     def load_baseline(self) -> None:
@@ -23,34 +25,46 @@ class BaselineStore:
             self.description = data.get("description", "")
             self.examples = data.get("examples", [])
 
-    def compute_centroid(self, api_key: str) -> List[float]:
-        """Compute the centroid (mean vector) of all baseline examples."""
+    def compute_centroid(self, api_key: str) -> np.ndarray:
+        """Compute the centroid (mean vector) of all baseline examples using NumPy."""
         if not self.examples:
             raise ValueError("No baseline examples found to compute centroid.")
 
-        embeddings = []
+        embeddings_list = []
         for example in self.examples:
             emb = self.get_embedding(example, api_key)
             if emb:
-                embeddings.append(emb)
+                embeddings_list.append(emb)
 
-        if not embeddings:
+        if not embeddings_list:
             raise RuntimeError("Failed to generate embeddings for any baseline examples.")
 
-        # Compute average vector
-        dimensions = len(embeddings[0])
-        num_embeddings = len(embeddings)
-        centroid = [0.0] * dimensions
+        self.embeddings = np.array(embeddings_list)
+        self.centroid = self.embeddings.mean(axis=0)
+        return self.centroid
 
-        for emb in embeddings:
-            for i in range(dimensions):
-                centroid[i] += emb[i]
-
-        for i in range(dimensions):
-            centroid[i] /= num_embeddings
-
-        self.centroid = centroid
-        return centroid
+    def calculate_percentile_threshold(self, metric: str = "cosine", percentile: float = 95.0) -> float:
+        """Calculate the threshold (percentile of distances of clean baseline samples from centroid)."""
+        if self.embeddings is None or self.centroid is None:
+            raise RuntimeError("Baseline centroid and embeddings must be computed first.")
+            
+        metric = metric.lower()
+        if metric == "cosine":
+            norms = np.linalg.norm(self.embeddings, axis=1)
+            norm_c = np.linalg.norm(self.centroid)
+            if norm_c == 0:
+                dists = np.ones(len(self.embeddings))
+            else:
+                # Avoid division by zero by replacing zero norms with 1
+                norms = np.where(norms == 0, 1.0, norms)
+                dots = np.dot(self.embeddings, self.centroid)
+                dists = 1.0 - dots / (norms * norm_c)
+        elif metric == "euclidean":
+            dists = np.linalg.norm(self.embeddings - self.centroid, axis=1)
+        else:
+            raise ValueError("metric must be either 'cosine' or 'euclidean'")
+            
+        return float(np.percentile(dists, percentile))
 
     @staticmethod
     def get_embedding(text: str, api_key: str) -> List[float]:
@@ -77,3 +91,4 @@ class BaselineStore:
         except Exception as e:
             # Re-raise with a clear message to aid debugging
             raise RuntimeError(f"Failed to fetch Gemini embedding: {e}")
+

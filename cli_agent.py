@@ -18,8 +18,8 @@ def main():
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.25,
-        help="Distance threshold for triggering drift warnings (default: 0.25)"
+        default=None,
+        help="Distance threshold for triggering warnings. If omitted, auto-calibrates using the 95th percentile of baseline distances."
     )
     parser.add_argument(
         "--metric",
