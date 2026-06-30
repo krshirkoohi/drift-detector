@@ -1,69 +1,64 @@
-import math
 import time
 import os
 import json
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
+import numpy as np
 from .baseline import BaselineStore
-
-def dot_product(v1: List[float], v2: List[float]) -> float:
-    return sum(x * y for x, y in zip(v1, v2))
-
-def magnitude(v: List[float]) -> float:
-    return math.sqrt(sum(x * x for x in v))
-
-def cosine_similarity(v1: List[float], v2: List[float]) -> float:
-    mag1 = magnitude(v1)
-    mag2 = magnitude(v2)
-    if mag1 == 0 or mag2 == 0:
-        return 0.0
-    return dot_product(v1, v2) / (mag1 * mag2)
-
-def cosine_distance(v1: List[float], v2: List[float]) -> float:
-    return 1.0 - cosine_similarity(v1, v2)
-
-def euclidean_distance(v1: List[float], v2: List[float]) -> float:
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(v1, v2)))
 
 class DriftDetector:
     def __init__(
         self,
         baseline_store: BaselineStore,
         api_key: str,
-        threshold: float = 0.25,
+        threshold: Optional[float] = None,
         metric: str = "cosine",
         log_dir: Optional[str] = None
     ):
         self.baseline_store = baseline_store
         self.api_key = api_key
-        self.threshold = threshold
         self.metric = metric.lower()
         if self.metric not in ("cosine", "euclidean"):
             raise ValueError("metric must be either 'cosine' or 'euclidean'")
         self.log_dir = log_dir
-        self.centroid: Optional[List[float]] = None
+        self.centroid: Optional[np.ndarray] = None
         
         # Initialise centroid
         if self.baseline_store.centroid is None:
             self.baseline_store.compute_centroid(self.api_key)
         self.centroid = self.baseline_store.centroid
+        
+        # Auto-calibrate threshold (95th percentile of baseline distances) if not specified
+        if threshold is None:
+            self.threshold = self.baseline_store.calculate_percentile_threshold(self.metric, 95.0)
+        else:
+            self.threshold = threshold
 
     def check_response(self, response_text: str) -> Dict[str, Any]:
         """
-        Analyse a single response against the baseline.
+        Analyse a single response against the baseline using NumPy.
         Returns a dictionary with the results.
         """
         start_time = time.time()
         
         # 1. Fetch response embedding
-        response_emb = BaselineStore.get_embedding(response_text, self.api_key)
+        response_emb_list = BaselineStore.get_embedding(response_text, self.api_key)
+        response_emb = np.array(response_emb_list)
         
         # 2. Compute similarity & distance
-        cos_dist = cosine_distance(response_emb, self.centroid)
-        euc_dist = euclidean_distance(response_emb, self.centroid)
+        norm_r = np.linalg.norm(response_emb)
+        norm_c = np.linalg.norm(self.centroid)
+        
+        if norm_r == 0 or norm_c == 0:
+            cos_dist = 1.0
+        else:
+            dots = np.dot(response_emb, self.centroid)
+            cos_dist = float(1.0 - dots / (norm_r * norm_c))
+            
+        euc_dist = float(np.linalg.norm(response_emb - self.centroid))
         
         # Determine drift status based on selected metric
         current_distance = cos_dist if self.metric == "cosine" else euc_dist
-        is_drifting = current_distance > self.threshold
+        is_drifting = bool(current_distance > self.threshold)
         
         latency_ms = (time.time() - start_time) * 1000
         
@@ -90,3 +85,4 @@ class DriftDetector:
         log_file = os.path.join(self.log_dir, f"drift_metrics_{self.baseline_store.name}.jsonl")
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(result) + "\n")
+

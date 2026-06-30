@@ -19,7 +19,13 @@ def main():
     store = BaselineStore(baseline_path)
     detector_cos = DriftDetector(store, api_key, threshold=0.25, metric="cosine")
     detector_euc = DriftDetector(store, api_key, threshold=0.70, metric="euclidean")
-    print("✅ Centroid calculated successfully.\n")
+    
+    detector_auto_cos = DriftDetector(store, api_key, threshold=None, metric="cosine")
+    detector_auto_euc = DriftDetector(store, api_key, threshold=None, metric="euclidean")
+    
+    print("✅ Centroids calculated successfully.")
+    print(f"📊 Auto-calibrated Cosine Threshold (95th %ile):    {detector_auto_cos.threshold:.4f}")
+    print(f"📊 Auto-calibrated Euclidean Threshold (95th %ile): {detector_auto_euc.threshold:.4f}\n")
 
     # Test 1: On-topic response
     on_topic_text = (
@@ -31,8 +37,11 @@ def main():
     print(f"Response: {on_topic_text}")
     res1_cos = detector_cos.check_response(on_topic_text)
     res1_euc = detector_euc.check_response(on_topic_text)
-    print(f"Cosine Distance:    {res1_cos['cosine_distance']:.4f} (Is Drifting: {res1_cos['is_drifting']})")
-    print(f"Euclidean Distance: {res1_euc['euclidean_distance']:.4f} (Is Drifting: {res1_euc['is_drifting']})")
+    res1_auto_cos = detector_auto_cos.check_response(on_topic_text)
+    res1_auto_euc = detector_auto_euc.check_response(on_topic_text)
+    
+    print(f"Cosine Distance:    {res1_cos['cosine_distance']:.4f} (Manual Drift: {res1_cos['is_drifting']}, Auto Drift: {res1_auto_cos['is_drifting']})")
+    print(f"Euclidean Distance: {res1_euc['euclidean_distance']:.4f} (Manual Drift: {res1_euc['is_drifting']}, Auto Drift: {res1_auto_euc['is_drifting']})")
     print("-" * 50 + "\n")
 
     # Test 2: Off-topic response
@@ -45,8 +54,11 @@ def main():
     print(f"Response: {off_topic_text}")
     res2_cos = detector_cos.check_response(off_topic_text)
     res2_euc = detector_euc.check_response(off_topic_text)
-    print(f"Cosine Distance:    {res2_cos['cosine_distance']:.4f} (Is Drifting: {res2_cos['is_drifting']})")
-    print(f"Euclidean Distance: {res2_euc['euclidean_distance']:.4f} (Is Drifting: {res2_euc['is_drifting']})")
+    res2_auto_cos = detector_auto_cos.check_response(off_topic_text)
+    res2_auto_euc = detector_auto_euc.check_response(off_topic_text)
+    
+    print(f"Cosine Distance:    {res2_cos['cosine_distance']:.4f} (Manual Drift: {res2_cos['is_drifting']}, Auto Drift: {res2_auto_cos['is_drifting']})")
+    print(f"Euclidean Distance: {res2_euc['euclidean_distance']:.4f} (Manual Drift: {res2_euc['is_drifting']}, Auto Drift: {res2_auto_euc['is_drifting']})")
     print("-" * 50 + "\n")
 
 if __name__ == "__main__":
