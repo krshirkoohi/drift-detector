@@ -93,6 +93,66 @@ def run_tests() -> bool:
 
     print("-" * 110)
     
+    # Run sequential trend test scenarios
+    print("\n====================================================")
+    print("      RUNNING SEQUENTIAL TREND TEST SCENARIOS       ")
+    print("====================================================\n")
+    
+    # 1. One-turn spike sequence
+    # 2 clean responses, 1 drifted response, 1 clean response
+    # This should NOT trigger the sustained trend alarm on any turn.
+    spike_sequence = [
+        "This project implements a drift detector that measures the cosine distance of LLM output embeddings from a baseline centroid. It aims to flag degradation as context fills, ensuring low overhead and inline warnings in CLI sessions.",
+        "This project implements a drift detector that measures the cosine distance of LLM output embeddings from a baseline centroid. It aims to flag degradation as context fills, ensuring low overhead and inline warnings in CLI sessions.",
+        "Preheat the oven to 180 degrees Celsius and prepare your baking sheet for chocolate chip cookies.",
+        "This project implements a drift detector that measures the cosine distance of LLM output embeddings from a baseline centroid. It aims to flag degradation as context fills, ensuring low overhead and inline warnings in CLI sessions."
+    ]
+    
+    # 2. Sustained trend sequence
+    # 3 responses with steadily increasing semantic distance
+    # This SHOULD trigger the sustained trend alarm on the final response.
+    trend_sequence = [
+        "This project implements a drift detector that measures the cosine distance of LLM output embeddings from a baseline centroid. It aims to flag degradation as context fills, ensuring low overhead and inline warnings in CLI sessions.",
+        "We need to monitor performance metrics of the servers, checking CPU load, RAM usage, and network bandwidth in real-time.",
+        "Preheat the oven to 180 degrees Celsius and prepare your baking sheet for chocolate chip cookies."
+    ]
+    
+    print("Running 'One-turn Spike' sequence (expected: NO sustained trend alarm)...")
+    detector_trend_spike = DriftDetector(store, api_key, threshold=None, metric="cosine", use_trend=True)
+    spike_alarms = []
+    for idx, text in enumerate(spike_sequence):
+        res = detector_trend_spike.check_response(text)
+        is_drifting = res["is_drifting"]
+        spike_alarms.append(is_drifting)
+        print(f"  Turn {idx+1}: Cosine Distance: {res['cosine_distance']:.4f} | Drifting/Alarm: {is_drifting}")
+        print(f"    PH Statistic: {res.get('ph_statistic'):.6f} | PH Threshold: {res.get('ph_threshold'):.6f} | Delta: {res.get('ph_delta'):.6f}")
+        
+    if any(spike_alarms):
+        print("❌ FAIL: 'One-turn Spike' sequence triggered a trend alarm!")
+        all_passed = False
+    else:
+        print("✅ PASS: 'One-turn Spike' sequence did not trigger the trend alarm.")
+        
+    print("\nRunning 'Sustained Trend' sequence (expected: alarm triggers on final turn)...")
+    detector_trend_sustained = DriftDetector(store, api_key, threshold=None, metric="cosine", use_trend=True)
+    trend_alarms = []
+    for idx, text in enumerate(trend_sequence):
+        res = detector_trend_sustained.check_response(text)
+        is_drifting = res["is_drifting"]
+        trend_alarms.append(is_drifting)
+        print(f"  Turn {idx+1}: Cosine Distance: {res['cosine_distance']:.4f} | Drifting/Alarm: {is_drifting}")
+        print(f"    PH Statistic: {res.get('ph_statistic'):.6f} | PH Threshold: {res.get('ph_threshold'):.6f} | Delta: {res.get('ph_delta'):.6f}")
+        
+    # We expect False, False, True for the trend alarms
+    expected_trend = [False, False, True]
+    if trend_alarms == expected_trend:
+        print("✅ PASS: 'Sustained Trend' sequence triggered alarm exactly as expected (True only on turn 3).")
+    else:
+        print(f"❌ FAIL: 'Sustained Trend' sequence alarm sequence was {trend_alarms}, expected {expected_trend}!")
+        all_passed = False
+
+    print("\n" + "=" * 52)
+    
     if all_passed:
         print("\n🎉 All regression tests passed successfully!")
     else:

@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import urllib.request
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .baseline import BaselineStore
 from .detector import DriftDetector
 
@@ -39,7 +39,12 @@ def generate_gemini_response(prompt: str, history: List[Dict[str, Any]], api_key
     except Exception as e:
         raise RuntimeError(f"Gemini API request failed: {e}")
 
-def run_cli_agent(baseline_file: str, threshold: float = 0.25, metric: str = "cosine") -> None:
+def run_cli_agent(
+    baseline_file: str, 
+    threshold: Optional[float] = None, 
+    metric: str = "cosine", 
+    use_trend: bool = False
+) -> None:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("❌ Error: GEMINI_API_KEY environment variable is not set.")
@@ -57,10 +62,11 @@ def run_cli_agent(baseline_file: str, threshold: float = 0.25, metric: str = "co
             api_key=api_key,
             threshold=threshold,
             metric=metric,
-            log_dir=os.path.join(os.path.dirname(baseline_file), "..", "data")
+            log_dir=os.path.join(os.path.dirname(baseline_file), "..", "data"),
+            use_trend=use_trend
         )
         print("✅ Baseline centroid calculated successfully.")
-        print(f"✅ Drift detector active (Metric: {metric}, Threshold: {threshold}).")
+        print(f"✅ Drift detector active (Metric: {metric}, Threshold: {detector.threshold:.4f}, Use Trend: {use_trend}).")
     except Exception as e:
         print(f"❌ Error during initialisation: {e}")
         sys.exit(1)
@@ -94,11 +100,19 @@ def run_cli_agent(baseline_file: str, threshold: float = 0.25, metric: str = "co
             # If drift is detected, inject inline notification first
             if metrics["is_drifting"]:
                 print("\n" + "=" * 52)
-                print(f"⚠️  DRIFT DETECTED: Output has drifted from baseline spec!")
-                print(f"   Active Metric:   {metrics['metric'].upper()}")
-                print(f"   Cosine Distance: {metrics['cosine_distance']:.4f}")
-                print(f"   Euclid Distance: {metrics['euclidean_distance']:.4f}")
-                print(f"   Threshold:       {metrics['threshold']:.4f}")
+                if use_trend:
+                    print(f"⚠️  DRIFT DETECTED: Sustained trend drift detected!")
+                    print(f"   Running Mean:    {metrics['ph_running_mean']:.4f}")
+                    print(f"   Running Sum:     {metrics['ph_running_sum']:.4f}")
+                    print(f"   Min Sum:         {metrics['ph_min_sum']:.4f}")
+                    print(f"   PH Statistic:    {metrics['ph_statistic']:.4f}")
+                    print(f"   PH Threshold:    {metrics['ph_threshold']:.4f}")
+                else:
+                    print(f"⚠️  DRIFT DETECTED: Output has drifted from baseline spec!")
+                    print(f"   Active Metric:   {metrics['metric'].upper()}")
+                    print(f"   Cosine Distance: {metrics['cosine_distance']:.4f}")
+                    print(f"   Euclid Distance: {metrics['euclidean_distance']:.4f}")
+                    print(f"   Threshold:       {metrics['threshold']:.4f}")
                 print(f"   Analysis Latency: {metrics['latency_ms']:.1f}ms")
                 print("=" * 52 + "\n")
                 

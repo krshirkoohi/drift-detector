@@ -12,7 +12,8 @@ class DriftDetector:
         api_key: str,
         threshold: Optional[float] = None,
         metric: str = "cosine",
-        log_dir: Optional[str] = None
+        log_dir: Optional[str] = None,
+        use_trend: bool = False
     ):
         self.baseline_store = baseline_store
         self.api_key = api_key
@@ -20,6 +21,7 @@ class DriftDetector:
         if self.metric not in ("cosine", "euclidean"):
             raise ValueError("metric must be either 'cosine' or 'euclidean'")
         self.log_dir = log_dir
+        self.use_trend = use_trend
         self.centroid: Optional[np.ndarray] = None
         
         # Initialise centroid
@@ -32,6 +34,36 @@ class DriftDetector:
             self.threshold = self.baseline_store.calculate_percentile_threshold(self.metric, 95.0)
         else:
             self.threshold = threshold
+
+        # Page-Hinkley session state variables
+        self.ph_n = 0
+        self.ph_running_mean = 0.0
+        self.ph_running_sum = 0.0
+        self.ph_min_sum = 0.0
+
+        # Calibrate Page-Hinkley parameters (ph_delta, ph_threshold) using the standard deviation 
+        # of the distances of baseline examples from the centroid.
+        self._calibrate_page_hinkley()
+
+    def _calibrate_page_hinkley(self) -> None:
+        """
+        Calibrate Page-Hinkley parameters based on the standard deviation of baseline distances.
+        """
+        if self.baseline_store.embeddings is None or self.centroid is None:
+            self.baseline_store.compute_centroid(self.api_key)
+            
+        if self.metric == "cosine":
+            norms = np.linalg.norm(self.baseline_store.embeddings, axis=1)
+            norm_c = np.linalg.norm(self.centroid)
+            norms = np.where(norms == 0, 1.0, norms)
+            dots = np.dot(self.baseline_store.embeddings, self.centroid)
+            dists = 1.0 - dots / (norms * norm_c)
+        else: # euclidean
+            dists = np.linalg.norm(self.baseline_store.embeddings - self.centroid, axis=1)
+            
+        std_dev = float(np.std(dists))
+        self.ph_delta = 0.1 * std_dev
+        self.ph_threshold = 5.0 * std_dev
 
     def check_response(self, response_text: str) -> Dict[str, Any]:
         """
@@ -56,9 +88,25 @@ class DriftDetector:
             
         euc_dist = float(np.linalg.norm(response_emb - self.centroid))
         
-        # Determine drift status based on selected metric
+        # Determine current distance based on selected metric
         current_distance = cos_dist if self.metric == "cosine" else euc_dist
-        is_drifting = bool(current_distance > self.threshold)
+        
+        # Update Page-Hinkley streaming state
+        self.ph_n += 1
+        old_mean = self.ph_running_mean
+        self.ph_running_mean = old_mean + (current_distance - old_mean) / self.ph_n
+        
+        self.ph_running_sum += (current_distance - self.ph_running_mean - self.ph_delta)
+        self.ph_min_sum = min(self.ph_min_sum, self.ph_running_sum)
+        
+        ph_statistic = self.ph_running_sum - self.ph_min_sum
+        trend_alarm = bool(ph_statistic > self.ph_threshold)
+        
+        # Determine drift status based on whether trend checking is active
+        if self.use_trend:
+            is_drifting = trend_alarm
+        else:
+            is_drifting = bool(current_distance > self.threshold)
         
         latency_ms = (time.time() - start_time) * 1000
         
@@ -73,6 +121,17 @@ class DriftDetector:
             "latency_ms": latency_ms
         }
         
+        if self.use_trend:
+            result.update({
+                "ph_running_mean": self.ph_running_mean,
+                "ph_running_sum": self.ph_running_sum,
+                "ph_min_sum": self.ph_min_sum,
+                "ph_statistic": ph_statistic,
+                "ph_threshold": self.ph_threshold,
+                "ph_delta": self.ph_delta,
+                "trend_alarm": trend_alarm
+            })
+        
         # 3. Log metrics if configured
         if self.log_dir:
             self._log_metrics(result)
@@ -85,4 +144,5 @@ class DriftDetector:
         log_file = os.path.join(self.log_dir, f"drift_metrics_{self.baseline_store.name}.jsonl")
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(result) + "\n")
+
 

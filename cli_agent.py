@@ -27,10 +27,15 @@ def main():
         default="cosine",
         help="Distance metric to use for drift calculation (default: cosine)"
     )
+    parser.add_argument(
+        "--use-trend",
+        action="store_true",
+        help="Toggle Page-Hinkley trend checking for sustained-trend drift detection."
+    )
     
     args = parser.parse_args()
     
-    run_cli_agent(args.baseline, args.threshold, args.metric)
+    run_cli_agent(args.baseline, args.threshold, args.metric, args.use_trend)
 
 if __name__ == "__main__":
     main()
