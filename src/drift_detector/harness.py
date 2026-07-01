@@ -108,10 +108,12 @@ class AgentHarness:
         detector: DriftDetector,
         log_dir: Optional[str] = None,
         verbose: bool = True,
+        detailed: bool = False,
     ) -> None:
         self.detector = detector
         self.log_dir = log_dir
         self.verbose = verbose
+        self.detailed = detailed
 
         # Active session state
         self._session_id: Optional[str] = None
@@ -304,20 +306,27 @@ class AgentHarness:
     # ------------------------------------------------------------------
 
     def _print_turn_scorecard(self, record: TurnRecord) -> None:
-        """Print a formatted per-turn drift scorecard to stdout."""
-        drift_icon = "🔴 DRIFT" if record.is_drifting else "🟢 OK   "
-        print(
-            f"  Turn {record.turn_index:>3}  {drift_icon}  "
-            f"cos={record.cosine_distance:.4f}  "
-            f"euc={record.euclidean_distance:.4f}  "
-            f"thr={record.threshold:.4f}  "
-            f"({record.latency_ms:.0f}ms)"
-        )
-        if record.is_drifting and record.ph_statistic is not None:
-            print(
-                f"            PH stat={record.ph_statistic:.4f}  "
-                f"PH thr={record.ph_threshold:.4f}"
-            )
+        """Print a per-turn drift notice to stdout.
+
+        Default mode: silent on clean turns, one line on drift.
+        Detailed mode: silent on clean turns, metric block on drift.
+        """
+        if not record.is_drifting:
+            return  # completely silent on clean turns
+
+        if self.detailed:
+            print(f"\n  {'─'*52}")
+            print(f"  ⚠  Drift detected  —  turn {record.turn_index}")
+            print(f"     Cosine / Euclidean : "
+                  f"{record.cosine_distance:.4f} / {record.euclidean_distance:.4f}  "
+                  f"(threshold {record.threshold:.4f})")
+            if record.ph_statistic is not None:
+                print(f"     PH statistic      : {record.ph_statistic:.4f}  "
+                      f"(PH threshold {record.ph_threshold:.4f})")
+            print(f"     Latency           : {record.latency_ms:.0f}ms")
+            print(f"  {'─'*52}\n")
+        else:
+            print(f"\n  ⚠  Drift detected — agent may be going off-topic.\n")
 
 
 # ---------------------------------------------------------------------------

@@ -122,7 +122,12 @@ def main() -> None:
     parser.add_argument(
         "--quiet",
         action="store_true",
-        help="Suppress per-turn scorecard output (summary still printed at end)",
+        help="Suppress all drift notice output (summary still printed at end)",
+    )
+    parser.add_argument(
+        "--detailed",
+        action="store_true",
+        help="Show full metric block on drift notices (default: single-line notice only)",
     )
     args = parser.parse_args()
 
@@ -169,6 +174,7 @@ def main() -> None:
         detector=detector,
         log_dir=args.log_dir,
         verbose=not args.quiet,
+        detailed=args.detailed,
     )
 
     # ------------------------------------------------------------------

@@ -39,13 +39,44 @@ def generate_gemini_response(prompt: str, history: List[Dict[str, Any]], api_key
     except Exception as e:
         raise RuntimeError(f"Gemini API request failed: {e}")
 
+def _print_drift_notice(metrics: Dict[str, Any], use_trend: bool, detailed: bool) -> None:
+    """Print an inline drift notice to stdout.
+
+    In default mode a single line is printed.  In detailed mode the full
+    metric block is appended on the lines immediately following.
+    Silent on clean turns — this function must only be called when
+    ``metrics['is_drifting']`` is True.
+    """
+    if detailed:
+        # ── Detailed mode: notice + metric block ─────────────────────────
+        print("\n" + "─" * 54)
+        if use_trend:
+            print("  ⚠  Drift detected  (sustained trend)")
+            print(f"     PH statistic : {metrics['ph_statistic']:.4f}  "
+                  f"(threshold {metrics['ph_threshold']:.4f})")
+            print(f"     Running mean : {metrics['ph_running_mean']:.4f}")
+        else:
+            print("  ⚠  Drift detected  (threshold exceeded)")
+            print(f"     {metrics['metric'].upper()} distance : "
+                  f"{metrics['cosine_distance' if metrics['metric'] == 'cosine' else 'euclidean_distance']:.4f}  "
+                  f"(threshold {metrics['threshold']:.4f})")
+            print(f"     Cosine / Euclidean : "
+                  f"{metrics['cosine_distance']:.4f} / {metrics['euclidean_distance']:.4f}")
+        print(f"     Latency        : {metrics['latency_ms']:.0f}ms")
+        print("─" * 54 + "\n")
+    else:
+        # ── Default mode: one clean inline line ───────────────────────────
+        print("\n  ⚠  Drift detected — agent may be going off-topic.\n")
+
+
 def run_cli_agent(
-    baseline_file: str, 
-    threshold: Optional[float] = None, 
-    metric: str = "cosine", 
+    baseline_file: str,
+    threshold: Optional[float] = None,
+    metric: str = "cosine",
     use_trend: bool = False,
     embedding_provider: str = "hosted",
-    local_model_name: str = "roberta-base"
+    local_model_name: str = "roberta-base",
+    detailed: bool = False,
 ) -> None:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -108,24 +139,9 @@ def run_cli_agent(
             # Check response for drift before outputting
             metrics = detector.check_response(response)
             
-            # If drift is detected, inject inline notification first
+            # Inline drift notice — silent on clean turns
             if metrics["is_drifting"]:
-                print("\n" + "=" * 52)
-                if use_trend:
-                    print(f"⚠️  DRIFT DETECTED: Sustained trend drift detected!")
-                    print(f"   Running Mean:    {metrics['ph_running_mean']:.4f}")
-                    print(f"   Running Sum:     {metrics['ph_running_sum']:.4f}")
-                    print(f"   Min Sum:         {metrics['ph_min_sum']:.4f}")
-                    print(f"   PH Statistic:    {metrics['ph_statistic']:.4f}")
-                    print(f"   PH Threshold:    {metrics['ph_threshold']:.4f}")
-                else:
-                    print(f"⚠️  DRIFT DETECTED: Output has drifted from baseline spec!")
-                    print(f"   Active Metric:   {metrics['metric'].upper()}")
-                    print(f"   Cosine Distance: {metrics['cosine_distance']:.4f}")
-                    print(f"   Euclid Distance: {metrics['euclidean_distance']:.4f}")
-                    print(f"   Threshold:       {metrics['threshold']:.4f}")
-                print(f"   Analysis Latency: {metrics['latency_ms']:.1f}ms")
-                print("=" * 52 + "\n")
+                _print_drift_notice(metrics, use_trend, detailed)
                 
             print(f"Agent > {response}\n")
             

@@ -33,6 +33,11 @@ def main():
         help="Toggle Page-Hinkley trend checking for sustained-trend drift detection."
     )
     parser.add_argument(
+        "--detailed",
+        action="store_true",
+        help="Show full metric block alongside drift notices (default: single-line notice only)."
+    )
+    parser.add_argument(
         "--provider",
         choices=["hosted", "local"],
         default="hosted",
@@ -47,12 +52,13 @@ def main():
     args = parser.parse_args()
     
     run_cli_agent(
-        args.baseline, 
-        args.threshold, 
-        args.metric, 
+        args.baseline,
+        args.threshold,
+        args.metric,
         args.use_trend,
         args.provider,
-        args.local_model
+        args.local_model,
+        args.detailed
     )
 
 if __name__ == "__main__":
