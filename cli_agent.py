@@ -32,10 +32,28 @@ def main():
         action="store_true",
         help="Toggle Page-Hinkley trend checking for sustained-trend drift detection."
     )
+    parser.add_argument(
+        "--provider",
+        choices=["hosted", "local"],
+        default="hosted",
+        help="Embedding provider to use: 'hosted' for Gemini API, 'local' for Hugging Face transformer models (default: hosted)"
+    )
+    parser.add_argument(
+        "--local-model",
+        default="roberta-base",
+        help="Local Hugging Face model name to use if provider is 'local' (default: roberta-base)"
+    )
     
     args = parser.parse_args()
     
-    run_cli_agent(args.baseline, args.threshold, args.metric, args.use_trend)
+    run_cli_agent(
+        args.baseline, 
+        args.threshold, 
+        args.metric, 
+        args.use_trend,
+        args.provider,
+        args.local_model
+    )
 
 if __name__ == "__main__":
     main()

@@ -4,29 +4,41 @@ import json
 from typing import Dict, Any, Optional
 import numpy as np
 from .baseline import BaselineStore
+from .embeddings import EmbeddingAdapter
 
 class DriftDetector:
     def __init__(
         self,
         baseline_store: BaselineStore,
-        api_key: str,
+        api_key: Optional[str] = None,
         threshold: Optional[float] = None,
         metric: str = "cosine",
         log_dir: Optional[str] = None,
-        use_trend: bool = False
+        use_trend: bool = False,
+        embedding_adapter: Optional[EmbeddingAdapter] = None
     ):
         self.baseline_store = baseline_store
-        self.api_key = api_key
         self.metric = metric.lower()
         if self.metric not in ("cosine", "euclidean"):
             raise ValueError("metric must be either 'cosine' or 'euclidean'")
         self.log_dir = log_dir
         self.use_trend = use_trend
+        
+        # Initialise embedding adapter
+        if embedding_adapter is None:
+            if not api_key:
+                raise ValueError("Either api_key or embedding_adapter must be provided.")
+            from .embeddings import GeminiEmbeddingAdapter
+            self.embedding_adapter = GeminiEmbeddingAdapter(api_key)
+        else:
+            self.embedding_adapter = embedding_adapter
+
+        self.api_key = api_key
         self.centroid: Optional[np.ndarray] = None
         
         # Initialise centroid
         if self.baseline_store.centroid is None:
-            self.baseline_store.compute_centroid(self.api_key)
+            self.baseline_store.compute_centroid(adapter=self.embedding_adapter)
         self.centroid = self.baseline_store.centroid
         
         # Auto-calibrate threshold (95th percentile of baseline distances) if not specified
@@ -50,7 +62,7 @@ class DriftDetector:
         Calibrate Page-Hinkley parameters based on the standard deviation of baseline distances.
         """
         if self.baseline_store.embeddings is None or self.centroid is None:
-            self.baseline_store.compute_centroid(self.api_key)
+            self.baseline_store.compute_centroid(adapter=self.embedding_adapter)
             
         if self.metric == "cosine":
             norms = np.linalg.norm(self.baseline_store.embeddings, axis=1)
@@ -73,7 +85,7 @@ class DriftDetector:
         start_time = time.time()
         
         # 1. Fetch response embedding
-        response_emb_list = BaselineStore.get_embedding(response_text, self.api_key)
+        response_emb_list = self.embedding_adapter.embed(response_text)
         response_emb = np.array(response_emb_list)
         
         # 2. Compute similarity & distance

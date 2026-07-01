@@ -3,6 +3,7 @@ import os
 import urllib.request
 from typing import List, Optional
 import numpy as np
+from .embeddings import EmbeddingAdapter
 
 class BaselineStore:
     def __init__(self, baseline_path: str):
@@ -25,14 +26,24 @@ class BaselineStore:
             self.description = data.get("description", "")
             self.examples = data.get("examples", [])
 
-    def compute_centroid(self, api_key: str) -> np.ndarray:
+    def compute_centroid(
+        self, 
+        api_key: Optional[str] = None, 
+        adapter: Optional[EmbeddingAdapter] = None
+    ) -> np.ndarray:
         """Compute the centroid (mean vector) of all baseline examples using NumPy."""
         if not self.examples:
             raise ValueError("No baseline examples found to compute centroid.")
 
+        if adapter is None:
+            if not api_key:
+                raise ValueError("Either api_key or adapter must be provided.")
+            from .embeddings import GeminiEmbeddingAdapter
+            adapter = GeminiEmbeddingAdapter(api_key)
+
         embeddings_list = []
         for example in self.examples:
-            emb = self.get_embedding(example, api_key)
+            emb = adapter.embed(example)
             if emb:
                 embeddings_list.append(emb)
 

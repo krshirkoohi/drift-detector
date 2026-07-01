@@ -13,8 +13,9 @@ import sys
 import json
 from typing import List, Dict, Any
 
-# Add the src directory to the Python path
+# Add the src and tests directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from drift_detector import BaselineStore, DriftDetector
 
@@ -150,6 +151,11 @@ def run_tests() -> bool:
     else:
         print(f"❌ FAIL: 'Sustained Trend' sequence alarm sequence was {trend_alarms}, expected {expected_trend}!")
         all_passed = False
+
+    # Run local model tests
+    from test_local_model import run_local_model_tests
+    local_passed = run_local_model_tests()
+    all_passed = all_passed and local_passed
 
     print("\n" + "=" * 52)
     

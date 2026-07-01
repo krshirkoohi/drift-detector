@@ -43,7 +43,9 @@ def run_cli_agent(
     baseline_file: str, 
     threshold: Optional[float] = None, 
     metric: str = "cosine", 
-    use_trend: bool = False
+    use_trend: bool = False,
+    embedding_provider: str = "hosted",
+    local_model_name: str = "roberta-base"
 ) -> None:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -56,6 +58,14 @@ def run_cli_agent(
     print(f"Loading baseline spec from: {baseline_file}...")
     
     try:
+        from .embeddings import GeminiEmbeddingAdapter, LocalEmbeddingAdapter
+        if embedding_provider.lower() == "local":
+            print(f"Using local embedding provider: {local_model_name}...")
+            adapter = LocalEmbeddingAdapter(local_model_name)
+        else:
+            print("Using hosted Gemini embedding provider...")
+            adapter = GeminiEmbeddingAdapter(api_key)
+
         store = BaselineStore(baseline_file)
         detector = DriftDetector(
             baseline_store=store,
@@ -63,7 +73,8 @@ def run_cli_agent(
             threshold=threshold,
             metric=metric,
             log_dir=os.path.join(os.path.dirname(baseline_file), "..", "data"),
-            use_trend=use_trend
+            use_trend=use_trend,
+            embedding_adapter=adapter
         )
         print("✅ Baseline centroid calculated successfully.")
         print(f"✅ Drift detector active (Metric: {metric}, Threshold: {detector.threshold:.4f}, Use Trend: {use_trend}).")
