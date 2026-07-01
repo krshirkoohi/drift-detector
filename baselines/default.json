@@ -4,6 +4,23 @@
   "examples": [
     "Here is a clear and concise analysis of the project requirements, identifying the core MVP components, functional stories, and non-functional bounds. We have established that tracking embedding distance against a fixed baseline centroid is our primary metric.",
     "The statistical validation plan compares fresh-context baseline output against a saturated, off-topic pollutant context to calibrate the cosine distance threshold. Page-Hinkley and Kolmogorov-Smirnov tests will be evaluated in future iterations.",
-    "Our design prioritises low runtime overhead, using lightweight sentence embeddings to calculate cosine similarity. If the similarity drops below our pre-calibrated threshold, an inline notice is emitted immediately in the CLI session."
+    "Our design prioritises low runtime overhead, using lightweight sentence embeddings to calculate cosine similarity. If the similarity drops below our pre-calibrated threshold, an inline notice is emitted immediately in the CLI session.",
+    "The integration wraps the base LLM client, intercepting incoming and outgoing request objects to transparently measure turn latency.",
+    "We configure the online feature extractor to calculate the vocabulary repetition rate using a rolling window of recent words.",
+    "Our system measures format compliance by matching the JSON output keys against the predefined Pydantic schema.",
+    "The ADWIN detector dynamically scales its monitoring window, triggering alarms only when statistical distribution shifts occur.",
+    "To preserve model intelligence, the agent recommends summary compaction when context tokens exceed the smart zone limit.",
+    "We enforce structured output formatting across all turns by validating required system keywords in the model's response.",
+    "The calibration harness runs prompt evaluations on clean configurations to establish a baseline semantic variance.",
+    "We monitor the cumulative token count per turn to map output drift against the filling context window size.",
+    "A sustained-trend detector processes the sequence of similarity metrics to distinguish noise from true degradation.",
+    "The metrics logger serializes cosine distance, execution overhead, and timestamp metadata into a local JSON Lines file.",
+    "Local embedding models are integrated via a pluggable adapter, reducing network dependencies and API call overhead.",
+    "We evaluate the accuracy gap by comparing correct answers on fresh probes with results from context-polluted prompts.",
+    "The warning system logs a non-blocking diagnostic notification when similarity metrics drop near the calibration boundary.",
+    "We isolate variables by testing pure saturation effects with random characters against semantic drift from off-topic inputs.",
+    "L2 normalization is applied to all embedding vectors to ensure distance calculations represent directional meaning changes.",
+    "We configure the offline test harness to generate ROC curves and calibrate optimal decision bounds on validation datasets.",
+    "The middleware decorator intercepts prompt sequences and injects inline alerts directly into the developer console."
   ]
 }
