@@ -151,3 +151,72 @@ def run_cli_agent(
             
         except Exception as e:
             print(f"\n❌ Agent Error: {e}\n")
+
+
+def _cli_entrypoint() -> None:
+    """Console-script entry point registered as ``driftd`` by pyproject.toml.
+
+    Mirrors the argument surface of cli_agent.py so that after
+    ``pip install -e .`` the user can run::
+
+        driftd --baseline baselines/default.json
+        driftd --baseline baselines/default.json --use-trend --detailed
+        driftd --provider local --local-model roberta-base
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="driftd",
+        description="driftd — inline semantic drift detector for LLM chat sessions",
+    )
+    parser.add_argument(
+        "--baseline",
+        default=None,
+        required=True,
+        help="Path to the baseline specification JSON file",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Distance threshold (auto-calibrated to 95th percentile if omitted)",
+    )
+    parser.add_argument(
+        "--metric",
+        choices=["cosine", "euclidean"],
+        default="cosine",
+        help="Distance metric (default: cosine)",
+    )
+    parser.add_argument(
+        "--use-trend",
+        action="store_true",
+        help="Enable Page-Hinkley sustained-trend detection",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=["hosted", "local"],
+        default="hosted",
+        help="Embedding provider: 'hosted' (Gemini API) or 'local' (Hugging Face)",
+    )
+    parser.add_argument(
+        "--local-model",
+        default="roberta-base",
+        help="Local Hugging Face model name when --provider=local",
+    )
+    parser.add_argument(
+        "--detailed",
+        action="store_true",
+        help="Show full metric block on drift notices (default: single-line notice only)",
+    )
+
+    args = parser.parse_args()
+    run_cli_agent(
+        baseline_file=args.baseline,
+        threshold=args.threshold,
+        metric=args.metric,
+        use_trend=args.use_trend,
+        embedding_provider=args.provider,
+        local_model_name=args.local_model,
+        detailed=args.detailed,
+    )
+

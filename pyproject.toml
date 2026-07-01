@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "driftd"
+version = "0.1.0"
+description = "Inline semantic drift detector for LLM chat sessions"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Kavia Shirkoohi" }]
+keywords = ["llm", "drift", "embeddings", "monitoring", "nlp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+local = [
+    "torch>=2.0",
+    "transformers>=4.35",
+]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+driftd = "drift_detector.cli:_cli_entrypoint"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+drift_detector = ["py.typed"]
