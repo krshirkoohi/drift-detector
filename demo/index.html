@@ -20,6 +20,7 @@
     --green: #46A171; --green-soft: #E8F1EC;
     --orange: #D5803B; --orange-soft: #FBEBDE;
     --red: #E56458; --red-soft: #FCE9E7;
+    --purple: #8B5CF6;
   }
   
   .dark-mode {
@@ -29,6 +30,7 @@
     --green: #59C58E; --green-soft: #1E3D2F;
     --orange: #E69D5E; --orange-soft: #422D1E;
     --red: #ED7D73; --red-soft: #42201D;
+    --purple: #A78BFA;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -153,6 +155,16 @@
       <div id="verdict" class="verdict ok"><span class="dot"></span><span id="verdictText">Session healthy — no sustained drift</span></div>
       <canvas id="chart" width="960" height="440" role="img"
               aria-label="Line chart of cosine distance per turn against the calibrated threshold"></canvas>
+      <div style="display: flex; justify-content: center; gap: 24px; font-size: 13px; margin: 12px 0 20px; color: var(--text2); flex-wrap: wrap;">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 16px; height: 3px; background: var(--blue); display: inline-block; border-radius: 2px;"></span>
+          <span>Cosine Distance (Left axis)</span>
+        </span>
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 16px; height: 3px; background: var(--purple); display: inline-block; border-radius: 2px;"></span>
+          <span>Page-Hinkley (PH) Trend (Right axis)</span>
+        </span>
+      </div>
       <div class="stats">
         <div class="stat"><div class="v" id="sTurns">0</div><div class="l">Turns scored</div></div>
         <div class="stat"><div class="v" id="sDist">–</div><div class="l">Last cosine distance</div></div>
