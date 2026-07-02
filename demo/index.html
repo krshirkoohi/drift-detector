@@ -252,7 +252,15 @@ function buildBaseline(texts){
   let n=Math.hypot(...c)||1;for(let i=0;i<DIM;i++)c[i]/=n;
   const d=embs.map(e=>cosDist(e,c)).sort((a,b)=>a-b);
   const thr=d[Math.min(d.length-1,Math.ceil(0.95*d.length)-1)];
-  return{centroid:c,threshold:thr};
+  
+  // Calibrate Page-Hinkley parameters using the standard deviation of baseline distances
+  const meanDist = d.reduce((sum, val) => sum + val, 0) / d.length;
+  const variance = d.reduce((sum, val) => sum + Math.pow(val - meanDist, 2), 0) / d.length;
+  const stdDev = Math.sqrt(variance) || 0.01;
+  const phDelta = 0.1 * stdDev;
+  const phThreshold = 5.0 * stdDev;
+  
+  return{centroid:c,threshold:thr,phDelta,phThreshold};
 }
 
 // ---------- Page-Hinkley sustained-trend rule ----------
@@ -271,7 +279,9 @@ class PageHinkley{
 // ---------- session state ----------
 let baseline,ph,turns;
 function resetSession(){
-  baseline=buildBaseline(BASELINE_TEXTS);ph=new PageHinkley();turns=[];
+  baseline=buildBaseline(BASELINE_TEXTS);
+  ph=new PageHinkley(baseline.phDelta, baseline.phThreshold);
+  turns=[];
   document.getElementById("chat").innerHTML="";
   document.getElementById("topicFocus").textContent = getBaselineSummary(BASELINE_TEXTS);
   render();
