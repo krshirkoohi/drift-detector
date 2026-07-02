@@ -323,9 +323,20 @@ function render(){
     turns.forEach((t,i)=>{ctx.fillStyle=t.alarm?"#E56458":t.breach?thresholdStyle:normalDotStyle;
       ctx.beginPath();ctx.arc(x(i),y(t.d),7,0,7);ctx.fill();});
   }
-  ctx.fillStyle=textStyle;ctx.fillText("turn",W/2-20,H-10);
+  // x-axis labels
+  ctx.fillStyle=textStyle;
+  ctx.font="18px -apple-system,Segoe UI,Arial";
+  const numLabels = Math.min(5, turns.length);
+  if (turns.length > 0) {
+    for (let i = 0; i < numLabels; i++) {
+      const idx = Math.round((turns.length - 1) * i / (numLabels - 1));
+      const val = idx + 1;
+      ctx.fillText(val.toString(), x(idx) - 8, H - 28);
+    }
+  }
+  ctx.fillText("turn",W/2-20,H-8);
   // verdict + stats
-  const drifted=turns.some(t=>t.alarm);
+  const drifted=turns.length ? turns[turns.length - 1].alarm : false;
   const v=document.getElementById("verdict");
   v.className="verdict "+(drifted?"drift":"ok");
   document.getElementById("verdictText").textContent=drifted
