@@ -71,6 +71,7 @@ class DriftDetector:
         self.ph_burn_in = ph_burn_in
         self.ph_exceed_streak = 0
         self.history: List[TurnScore] = []
+        self.has_drifted = False
 
         # Calibrate Page-Hinkley parameters (ph_delta, ph_threshold) using the standard deviation 
         # of the distances of baseline examples from the centroid.
@@ -203,6 +204,8 @@ class DriftDetector:
             trend_alarm=alarm,
             drifted=drifted
         )
+        if drifted:
+            self.has_drifted = True
         self.history.append(ts)
         return ts
 
@@ -220,6 +223,7 @@ class DriftDetector:
             "metric": self.metric,
             "trend_rule": self.use_trend,
             "topic_focus": self.baseline_store.get_topic_focus(),
+            "has_drifted": self.has_drifted,
         }
 
 

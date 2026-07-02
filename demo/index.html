@@ -346,7 +346,7 @@ function render(){
   }
   ctx.fillText("turn",W/2-20,H-8);
   // verdict + stats
-  const drifted=turns.length ? turns[turns.length - 1].alarm : false;
+  const drifted=turns.some(t=>t.alarm);
   const v=document.getElementById("verdict");
   v.className="verdict "+(drifted?"drift":"ok");
   document.getElementById("verdictText").textContent=drifted
