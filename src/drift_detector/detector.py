@@ -219,6 +219,7 @@ class DriftDetector:
             "peak_distance": round(float(np.max(ds)), 4) if ds else 0.0,
             "metric": self.metric,
             "trend_rule": self.use_trend,
+            "topic_focus": self.baseline_store.get_topic_focus(),
         }
 
 

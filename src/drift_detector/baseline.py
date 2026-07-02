@@ -87,6 +87,28 @@ class BaselineStore:
             
         return float(np.percentile(dists, percentile))
 
+    def get_topic_focus(self) -> str:
+        """Extract a summary list of the most frequent keywords in the baseline."""
+        import re
+        from collections import Counter
+        
+        stopwords = {
+            "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have", "he", "her", "his", "i", "if", "in", "into", "is", "it", "its", "of", "on", "or", "our", "she", "so", "that", "the", "their", "them", "they", "this", "to", "was", "we", "were", "while", "will", "with", "you", "your"
+        }
+        
+        words = []
+        for text in self.examples:
+            for word in re.findall(r"[a-z0-9']+", text.lower()):
+                if word not in stopwords and len(word) >= 3:
+                    words.append(word)
+        
+        if not words:
+            return "General conversation"
+            
+        common = [w for w, _ in Counter(words).most_common(4)]
+        return ", ".join(common)
+
+
     @staticmethod
     def get_embedding(text: str, api_key: str) -> List[float]:
         """Fetch the embedding for a given text from the Gemini API."""

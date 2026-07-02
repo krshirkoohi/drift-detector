@@ -1,68 +1,122 @@
 <!DOCTYPE html>
-<html lang="en-GB">
+<html lang="en-GB" class="">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drift Detector — Live Demo</title>
+<script>
+  // Initialise theme based on system preference on first page load
+  (function() {
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.documentElement.classList.add("dark-mode");
+    }
+  })();
+</script>
 <style>
-  :root{
-    --text:#2C2C2B; --text2:#7D7A75; --canvas:#FFFFFF; --soft:#F9F8F7;
-    --surface2:#F0EFED; --border:#E6E5E3;
-    --blue:#2783DE; --blue-soft:#E5F2FC;
-    --green:#46A171; --green-soft:#E8F1EC;
-    --orange:#D5803B; --orange-soft:#FBEBDE;
-    --red:#E56458; --red-soft:#FCE9E7;
+  :root {
+    --text: #2C2C2B; --text2: #7D7A75; --canvas: #FFFFFF; --soft: #F9F8F7;
+    --surface2: #F0EFED; --border: #E6E5E3;
+    --blue: #2783DE; --blue-soft: #E5F2FC;
+    --green: #46A171; --green-soft: #E8F1EC;
+    --orange: #D5803B; --orange-soft: #FBEBDE;
+    --red: #E56458; --red-soft: #FCE9E7;
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-       background:var(--soft);color:var(--text);font-size:16px;line-height:1.5}
-  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 64px}
-  header{margin-bottom:32px}
-  .kicker{display:inline-block;background:var(--blue-soft);color:var(--blue);
-          font-size:13px;font-weight:600;padding:4px 10px;border-radius:6px;margin-bottom:12px}
-  h1{font-size:32px;line-height:1.2;letter-spacing:-0.01em}
-  .sub{color:var(--text2);margin-top:8px;max-width:680px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-  @media(max-width:760px){.grid{grid-template-columns:1fr}.wrap{padding:24px 16px 48px}h1{font-size:26px}}
-  .card{background:var(--canvas);border:1px solid var(--border);border-radius:12px;padding:24px}
-  .card h2{font-size:15px;font-weight:600;color:var(--text2);text-transform:uppercase;
-           letter-spacing:0.04em;margin-bottom:16px}
+  
+  .dark-mode {
+    --text: #F0EFED; --text2: #A7A4A0; --canvas: #1C1B1A; --soft: #121110;
+    --surface2: #2A2928; --border: #3A3937;
+    --blue: #4EA2E8; --blue-soft: #1E2D3E;
+    --green: #59C58E; --green-soft: #1E3D2F;
+    --orange: #E69D5E; --orange-soft: #422D1E;
+    --red: #ED7D73; --red-soft: #42201D;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--soft); color: var(--text); font-size: 16px; line-height: 1.5;
+    transition: background 0.2s, color 0.2s;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
+  header { margin-bottom: 32px; position: relative; }
+  .kicker {
+    display: inline-block; background: var(--blue-soft); color: var(--blue);
+    font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 6px; margin-bottom: 12px;
+  }
+  h1 { font-size: 32px; line-height: 1.2; letter-spacing: -0.01em; }
+  .sub { color: var(--text2); margin-top: 8px; max-width: 680px; }
+  
+  /* Theme Toggle Button */
+  .theme-btn {
+    position: absolute; right: 0; top: 12px; border: 1px solid var(--border);
+    background: var(--canvas); color: var(--text); padding: 8px 12px; border-radius: 8px;
+    font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    font-weight: 500; transition: background 0.15s;
+  }
+  .theme-btn:hover { background: var(--surface2); }
+  
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media(max-width: 760px) {
+    .grid { grid-template-columns: 1fr; }
+    .wrap { padding: 24px 16px 48px; }
+    h1 { font-size: 26px; }
+    .theme-btn { position: static; margin-top: 16px; display: inline-flex; }
+  }
+  .card { background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  .card h2 {
+    font-size: 15px; font-weight: 600; color: var(--text2); text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 16px;
+  }
+  
+  /* Topic Focus Info Box */
+  .topic-box {
+    background: var(--soft); border: 1px dashed var(--border); border-radius: 8px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 14px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .topic-title { font-weight: 600; color: var(--text2); text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }
+  .topic-content { font-size: 14px; color: var(--text); font-weight: 500; }
+  
   /* chat */
-  #chat{display:flex;flex-direction:column;gap:12px;min-height:280px;max-height:380px;
-        overflow-y:auto;padding-right:4px;margin-bottom:16px}
-  .msg{border:1px solid var(--border);background:var(--soft);border-radius:8px;
-       padding:10px 14px;font-size:14px}
-  .msg .meta{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--text2)}
-  .chip{font-size:12px;font-weight:600;padding:1px 8px;border-radius:10px}
-  .chip.ok{background:var(--green-soft);color:var(--green)}
-  .chip.warn{background:var(--orange-soft);color:var(--orange)}
-  .chip.drift{background:var(--red-soft);color:var(--red)}
-  .chip.base{background:var(--surface2);color:var(--text2)}
-  .controls{display:flex;gap:8px;flex-wrap:wrap}
-  textarea{flex:1 1 100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;
-           font:inherit;font-size:14px;resize:vertical;min-height:44px}
-  textarea:focus{outline:2px solid var(--blue);outline-offset:-1px}
-  button{border:1px solid var(--border);background:var(--canvas);color:var(--text);
-         font:inherit;font-size:14px;font-weight:500;padding:10px 16px;border-radius:8px;
-         cursor:pointer;min-height:44px}
-  button:hover{background:var(--soft)}
-  button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-  button.primary:hover{background:#1f6fc0}
-  button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  #chat {
+    display: flex; flex-direction: column; gap: 12px; min-height: 280px; max-height: 380px;
+    overflow-y: auto; padding-right: 4px; margin-bottom: 16px;
+  }
+  .msg { border: 1px solid var(--border); background: var(--soft); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+  .msg .meta { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--text2); }
+  .chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .chip.ok { background: var(--green-soft); color: var(--green); }
+  .chip.warn { background: var(--orange-soft); color: var(--orange); }
+  .chip.drift { background: var(--red-soft); color: var(--red); }
+  .chip.base { background: var(--surface2); color: var(--text2); }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  textarea {
+    flex: 1 1 100%; border: 1px solid var(--border); background: var(--canvas); color: var(--text);
+    border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 14px; resize: vertical; min-height: 44px;
+  }
+  textarea:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+  button {
+    border: 1px solid var(--border); background: var(--canvas); color: var(--text);
+    font: inherit; font-size: 14px; font-weight: 500; padding: 10px 16px; border-radius: 8px;
+    cursor: pointer; min-height: 44px; transition: background 0.1s;
+  }
+  button:hover { background: var(--soft); }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.primary:hover { background: var(--blue); filter: brightness(0.9); }
+  button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  
   /* meter */
-  .verdict{display:flex;align-items:center;gap:12px;border-radius:8px;padding:14px 16px;
-           font-weight:600;margin-bottom:20px}
-  .verdict.ok{background:var(--green-soft);color:var(--green)}
-  .verdict.drift{background:var(--red-soft);color:var(--red)}
-  .dot{width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
-  canvas{width:100%;height:220px;display:block}
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
-  .stat{background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:12px}
-  .stat .v{font-size:22px;font-weight:600;letter-spacing:-0.01em}
-  .stat .l{font-size:12px;color:var(--text2);margin-top:2px}
-  .note{font-size:13px;color:var(--text2);margin-top:16px}
-  footer{margin-top:32px;font-size:13px;color:var(--text2)}
-  a{color:var(--blue)}
+  .verdict { display: flex; align-items: center; gap: 12px; border-radius: 8px; padding: 14px 16px; font-weight: 600; margin-bottom: 20px; }
+  .verdict.ok { background: var(--green-soft); color: var(--green); }
+  .verdict.drift { background: var(--red-soft); color: var(--red); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none; }
+  canvas { width: 100%; height: 220px; display: block; background: transparent; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+  .stat { background: var(--soft); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .stat .v { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .stat .l { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .note { font-size: 13px; color: var(--text2); margin-top: 16px; }
+  footer { margin-top: 32px; font-size: 13px; color: var(--text2); }
+  a { color: var(--blue); }
 </style>
 </head>
 <body>
@@ -70,9 +124,10 @@
   <header>
     <span class="kicker">driftd · live demo</span>
     <h1>Drift Detector</h1>
-    <p class="sub">Every assistant response is embedded and compared against a baseline of known-good
-    output. A sustained climb in distance raises a drift alarm; a one-turn blip is forgiven.
-    This demo runs entirely in your browser.</p>
+    <p class="sub">Every assistant response is embedded and compared against a baseline of known-good output. A sustained climb in distance raises a drift alarm; isolated spikes are forgiven. This demo runs entirely in your browser.</p>
+    <button class="theme-btn" id="themeToggle" aria-label="Toggle dark mode">
+      <span id="themeIcon">🌙</span> <span id="themeText">Dark Mode</span>
+    </button>
   </header>
 
   <div class="grid">
@@ -91,6 +146,10 @@
 
     <section class="card">
       <h2>Drift meter</h2>
+      <div class="topic-box">
+        <span class="topic-title">Target Topic Focus</span>
+        <span id="topicFocus" class="topic-content">Loading baseline keywords...</span>
+      </div>
       <div id="verdict" class="verdict ok"><span class="dot"></span><span id="verdictText">Session healthy — no sustained drift</span></div>
       <canvas id="chart" width="960" height="440" role="img"
               aria-label="Line chart of cosine distance per turn against the calibrated threshold"></canvas>
@@ -99,18 +158,37 @@
         <div class="stat"><div class="v" id="sDist">–</div><div class="l">Last cosine distance</div></div>
         <div class="stat"><div class="v" id="sThr">–</div><div class="l">p95 threshold</div></div>
       </div>
-      <p class="note">Demo embedder: deterministic token hashing (offline, no data leaves the page).
-      The packaged detector swaps in Gemini or any OpenAI-compatible embedding model without
-      touching the detection logic.</p>
+      <p class="note">Demo embedder: deterministic token hashing (offline, no data leaves the page). The packaged detector swaps in Gemini or any OpenAI-compatible embedding model without touching the detection logic.</p>
     </section>
   </div>
 
-  <footer>Baseline: 10 curated finance-domain samples · Metric: cosine on L2-normalised embeddings ·
-  Alarm: Page-Hinkley sustained-trend rule</footer>
+  <footer>Baseline: 10 curated finance-domain samples · Metric: cosine on L2-normalised embeddings · Alarm: Page-Hinkley sustained-trend rule</footer>
 </div>
 
 <script>
 "use strict";
+// ---------- dark mode toggle state ----------
+const themeToggle = document.getElementById("themeToggle");
+
+function isDarkMode() {
+  return document.documentElement.classList.contains("dark-mode");
+}
+
+function updateThemeButton() {
+  const dark = isDarkMode();
+  document.getElementById("themeIcon").textContent = dark ? "☀️" : "🌙";
+  document.getElementById("themeText").textContent = dark ? "Light Mode" : "Dark Mode";
+}
+
+themeToggle.onclick = () => {
+  document.documentElement.classList.toggle("dark-mode");
+  updateThemeButton();
+  render(); // redraw canvas with new theme colors
+};
+
+// Update button on initial load
+updateThemeButton();
+
 // ---------- deterministic embedder (mirror of DeterministicProvider) ----------
 const DIM = 128;
 const STOP = new Set("a an and are as at be but by for from had has have he her his i if in into is it its of on or our she so that the their them they this to was we were while will with you your".split(" "));
@@ -120,7 +198,7 @@ const tokenCache=new Map();
 function tokenVec(tok){
   if(!tokenCache.has(tok)){
     const rng=mulberry32(hash32(tok)),v=new Float64Array(DIM);
-    for(let i=0;i<DIM;i++){ // Box-Muller for approx normal components
+    for(let i=0;i<DIM;i++){
       const u1=Math.max(rng(),1e-9),u2=rng();
       v[i]=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
     }
@@ -153,6 +231,21 @@ const BASELINE_TEXTS=[
  "Headcount costs remain the largest line item in the operating budget.",
  "The board approved the capital allocation plan for the next fiscal year.",
  "Currency fluctuations had a minor impact on consolidated revenue this quarter."];
+
+// Dynamic keyword-based topic summary extractor
+function getBaselineSummary(texts) {
+  const counts = {};
+  for (const text of texts) {
+    for (const word of text.toLowerCase().match(/[a-z0-9']+/g) || []) {
+      if (STOP.has(word) || word.length < 3) continue;
+      counts[word] = (counts[word] || 0) + 1;
+    }
+  }
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const keywords = sorted.slice(0, 4).map(e => e[0]);
+  return "Corporate finance metrics (" + keywords.join(", ") + ")";
+}
+
 function buildBaseline(texts){
   const embs=texts.map(embed),c=new Float64Array(DIM);
   for(const e of embs)for(let i=0;i<DIM;i++)c[i]+=e[i];
@@ -179,7 +272,9 @@ class PageHinkley{
 let baseline,ph,turns;
 function resetSession(){
   baseline=buildBaseline(BASELINE_TEXTS);ph=new PageHinkley();turns=[];
-  document.getElementById("chat").innerHTML="";render();
+  document.getElementById("chat").innerHTML="";
+  document.getElementById("topicFocus").textContent = getBaselineSummary(BASELINE_TEXTS);
+  render();
 }
 function scoreTurn(text){
   const d=cosDist(embed(text),baseline.centroid);
@@ -203,22 +298,32 @@ function render(){
   const maxY=Math.max(baseline.threshold*1.4,...turns.map(t=>t.d*1.1),0.5);
   const x=i=>padL+(W-padL-padR)*(turns.length<2?0.5:i/(turns.length-1));
   const y=v=>padT+(H-padT-padB)*(1-v/maxY);
-  ctx.font="22px -apple-system,Segoe UI,Arial";ctx.fillStyle="#7D7A75";
+  
+  // Theme styling fetch
+  const dark = isDarkMode();
+  const borderStyle = dark ? "#3A3937" : "#E6E5E3";
+  const textStyle = dark ? "#A7A4A0" : "#7D7A75";
+  const thresholdStyle = dark ? "#E69D5E" : "#D5803B";
+  const normalDotStyle = dark ? "#4EA2E8" : "#2783DE";
+  const normalLineStyle = dark ? "#4EA2E8" : "#2783DE";
+  
+  ctx.font="22px -apple-system,Segoe UI,Arial";ctx.fillStyle=textStyle;
+  
   // gridlines
-  ctx.strokeStyle="#E6E5E3";ctx.lineWidth=1;
+  ctx.strokeStyle=borderStyle;ctx.lineWidth=1;
   for(let g=0;g<=4;g++){const v=maxY*g/4;ctx.beginPath();ctx.moveTo(padL,y(v));ctx.lineTo(W-padR,y(v));ctx.stroke();ctx.fillText(v.toFixed(2),8,y(v)+7);}
   // threshold
-  ctx.strokeStyle="#D5803B";ctx.setLineDash([10,8]);ctx.lineWidth=2.5;
+  ctx.strokeStyle=thresholdStyle;ctx.setLineDash([10,8]);ctx.lineWidth=2.5;
   ctx.beginPath();ctx.moveTo(padL,y(baseline.threshold));ctx.lineTo(W-padR,y(baseline.threshold));ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle="#D5803B";ctx.fillText("p95 threshold",W-padR-160,y(baseline.threshold)-10);
+  ctx.fillStyle=thresholdStyle;ctx.fillText("p95 threshold",W-padR-160,y(baseline.threshold)-10);
   // series
   if(turns.length){
-    ctx.strokeStyle="#2783DE";ctx.lineWidth=3;ctx.beginPath();
+    ctx.strokeStyle=normalLineStyle;ctx.lineWidth=3;ctx.beginPath();
     turns.forEach((t,i)=>i?ctx.lineTo(x(i),y(t.d)):ctx.moveTo(x(0),y(t.d)));ctx.stroke();
-    turns.forEach((t,i)=>{ctx.fillStyle=t.alarm?"#E56458":t.breach?"#D5803B":"#2783DE";
+    turns.forEach((t,i)=>{ctx.fillStyle=t.alarm?"#E56458":t.breach?thresholdStyle:normalDotStyle;
       ctx.beginPath();ctx.arc(x(i),y(t.d),7,0,7);ctx.fill();});
   }
-  ctx.fillStyle="#7D7A75";ctx.fillText("turn",W/2-20,H-10);
+  ctx.fillStyle=textStyle;ctx.fillText("turn",W/2-20,H-10);
   // verdict + stats
   const drifted=turns.some(t=>t.alarm);
   const v=document.getElementById("verdict");
@@ -247,7 +352,6 @@ document.getElementById("drifty").onclick=()=>scoreTurn(pick(DRIFTY));
 document.getElementById("reset").onclick=resetSession;
 
 resetSession();
-// preload a story: three clean turns, then sustained drift
 [CLEAN[0],CLEAN[1],CLEAN[2],DRIFTY[0],DRIFTY[1],DRIFTY[2]].forEach(scoreTurn);
 </script>
 </body>

@@ -88,6 +88,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(201, {
                 "session_id": sid,
                 "n_samples": len(texts),
+                "topic_focus": baseline_store.get_topic_focus(),
                 "cosine_threshold": round(baseline_store.calculate_percentile_threshold("cosine", 95.0), 4),
                 "euclidean_threshold": round(baseline_store.calculate_percentile_threshold("euclidean", 95.0), 4),
             })
