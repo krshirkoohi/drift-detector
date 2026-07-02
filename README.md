@@ -2,8 +2,6 @@
 
 **driftd** monitors LLM chat sessions in real time and surfaces an inline notice the moment the agent's responses drift away from an established baseline. It is silent on clean sessions and fires within one turn of detecting a shift.
 
-> 🚨 **CAUTION:** The GitHub repository for this project is public. Because baseline candidate chats are committed to git and pushed to GitHub, do NOT include any sensitive, credential-related, or controversial data inside the baseline files.
-
 > **Scope:** driftd measures *semantic and topic consistency* — it is a quality-consistency tool, not a fact-checker. It detects when an agent drifts off-topic or changes domain; it cannot verify whether an answer is factually correct.
 
 ---
