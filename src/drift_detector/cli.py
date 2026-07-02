@@ -153,6 +153,63 @@ def run_cli_agent(
             print(f"\n❌ Agent Error: {e}\n")
 
 
+def run_subcommands(argv: list[str]) -> None:
+    """Execute non-interactive subcommands like score, serve, or proxy."""
+    import argparse
+    from .embeddings import get_adapter
+    
+    p = argparse.ArgumentParser(prog="driftd", description="Semantic drift detector commands")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    s = sub.add_parser("score", help="score a JSONL file of turns against a baseline")
+    s.add_argument("--baseline", required=True)
+    s.add_argument("--turns", required=True, help="JSONL file, one {\"text\": ...} per line")
+    s.add_argument("--metric", choices=["cosine", "euclidean"], default="cosine")
+    s.add_argument("--use-trend", action="store_true", default=True)
+    s.add_argument("--no-trend", dest="use_trend", action="store_false")
+    s.add_argument("--provider", default="local")
+    s.add_argument("--detailed", action="store_true")
+
+    sub.add_parser("serve", help="run sidecar service (see drift_detector.sidecar --help)")
+    sub.add_parser("proxy", help="run drift proxy (see drift_detector.proxy --help)")
+
+    args, rest = p.parse_known_args(argv)
+    
+    if args.command == "serve":
+        from . import sidecar
+        sys.argv = ["driftd-serve", *rest]
+        sidecar.main()
+    elif args.command == "proxy":
+        from . import proxy
+        sys.argv = ["driftd-proxy", *rest]
+        proxy.main()
+    elif args.command == "score":
+        from pathlib import Path
+        provider = get_adapter(args.provider)
+        baseline_store = BaselineStore(args.baseline)
+        det = DriftDetector(
+            baseline_store=baseline_store,
+            metric=args.metric,
+            use_trend=args.use_trend,
+            embedding_adapter=provider,
+        )
+        for line in Path(args.turns).read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            text = obj["text"] if isinstance(obj, dict) else str(obj)
+            score = det.score(text)
+            flag = "DRIFT" if score.drifted else ("warn" if score.threshold_breach else "ok")
+            if args.detailed:
+                print(json.dumps(score.to_dict()))
+            else:
+                print(f"turn {score.turn:>3}  cos={score.cosine_distance:.4f}  "
+                      f"euc={score.euclidean_distance:.4f}  [{flag}]")
+        print(json.dumps(det.summary(), indent=2))
+        sys.exit(1 if any(t.drifted for t in det.history) else 0)
+
+
 def _cli_entrypoint() -> None:
     """Console-script entry point registered as ``driftd`` by pyproject.toml.
 
@@ -163,6 +220,11 @@ def _cli_entrypoint() -> None:
         driftd --baseline baselines/default.json --use-trend --detailed
         driftd --provider local --local-model roberta-base
     """
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ("serve", "proxy", "score"):
+        run_subcommands(sys.argv[1:])
+        return
+
     import argparse
 
     parser = argparse.ArgumentParser(

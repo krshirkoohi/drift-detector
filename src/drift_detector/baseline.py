@@ -6,14 +6,24 @@ import numpy as np
 from .embeddings import EmbeddingAdapter
 
 class BaselineStore:
-    def __init__(self, baseline_path: str):
+    def __init__(self, baseline_path: Optional[str] = None):
         self.baseline_path = baseline_path
         self.name: str = "default"
         self.description: str = ""
         self.examples: List[str] = []
         self.embeddings: Optional[np.ndarray] = None
         self.centroid: Optional[np.ndarray] = None
-        self.load_baseline()
+        if baseline_path:
+            self.load_baseline()
+
+    @classmethod
+    def from_examples(cls, examples: List[str], name: str = "default") -> "BaselineStore":
+        """Create a BaselineStore dynamically from a list of example texts."""
+        store = cls(baseline_path=None)
+        store.name = name
+        store.examples = examples
+        return store
+
 
     def load_baseline(self) -> None:
         """Load curated examples from the JSON baseline file."""

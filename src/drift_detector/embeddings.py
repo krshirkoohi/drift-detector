@@ -117,3 +117,85 @@ class LocalEmbeddingAdapter(EmbeddingAdapter):
             
             embeddings = sum_embeddings / sum_mask
             return embeddings[0].tolist()
+
+
+_STOPWORDS = frozenset(
+    "a an and are as at be but by for from had has have he her his i if in into is it its of on or "
+    "our she so that the their them they this to was we were while will with you your".split()
+)
+
+
+class DeterministicEmbeddingAdapter(EmbeddingAdapter):
+    """Offline, dependency-free embedding adapter for tests, CI, and demos."""
+
+    def __init__(self, dim: int = 256):
+        self.dim = dim
+        self._cache = {}
+
+    def _token_vec(self, token: str):
+        import hashlib
+        import numpy as np
+        if token not in self._cache:
+            seed = int.from_bytes(hashlib.sha256(token.encode()).digest()[:8], "big")
+            rng = np.random.default_rng(seed)
+            self._cache[token] = rng.standard_normal(self.dim)
+        return self._cache[token]
+
+    def embed(self, text: str) -> List[float]:
+        import re
+        import numpy as np
+        out = np.zeros(self.dim)
+        for t in re.findall(r"[a-z0-9']+", text.lower()):
+            if t not in _STOPWORDS:
+                out += self._token_vec(t)
+        norm = np.linalg.norm(out)
+        if norm == 0:
+            norm = 1.0
+        return (out / norm).tolist()
+
+
+class OpenAICompatibleEmbeddingAdapter(EmbeddingAdapter):
+    """Any OpenAI-compatible /v1/embeddings endpoint (OpenAI, Ollama, LM Studio, vLLM)."""
+
+    def __init__(
+        self,
+        base_url: str = "https://api.openai.com/v1",
+        model: str = "text-embedding-3-small",
+        api_key: str | None = None,
+        dim: int = 1536,
+    ):
+        import os
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.dim = dim
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+
+    def embed(self, text: str) -> List[float]:
+        import json
+        import urllib.request
+        req = urllib.request.Request(
+            f"{self.base_url}/embeddings",
+            data=json.dumps({"model": self.model, "input": [text]}).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+        return data["data"][0]["embedding"]
+
+
+def get_adapter(name: str, **kwargs) -> EmbeddingAdapter:
+    name = name.lower()
+    if name in ("local_hf", "local-hf"):
+        return LocalEmbeddingAdapter(**kwargs)
+    if name in ("local", "deterministic", "test"):
+        return DeterministicEmbeddingAdapter(**kwargs)
+    if name in ("gemini", "hosted"):
+        # hosted option in root maps to Gemini
+        return GeminiEmbeddingAdapter(**kwargs)
+    if name in ("openai", "openai-compatible", "ollama"):
+        return OpenAICompatibleEmbeddingAdapter(**kwargs)
+    raise ValueError(f"Unknown embedding adapter: {name}")
+

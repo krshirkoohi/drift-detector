@@ -38,4 +38,5 @@ share/python-wheels/
 
 # Project specific
 data/
+.DS_Store
 

@@ -2,6 +2,8 @@
 
 **driftd** monitors LLM chat sessions in real time and surfaces an inline notice the moment the agent's responses drift away from an established baseline. It is silent on clean sessions and fires within one turn of detecting a shift.
 
+> 🚨 **CAUTION:** The GitHub repository for this project is public. Because baseline candidate chats are committed to git and pushed to GitHub, do NOT include any sensitive, credential-related, or controversial data inside the baseline files.
+
 > **Scope:** driftd measures *semantic and topic consistency* — it is a quality-consistency tool, not a fact-checker. It detects when an agent drifts off-topic or changes domain; it cannot verify whether an answer is factually correct.
 
 ---
@@ -172,15 +174,22 @@ drift-detector/
 ├── src/drift_detector/
 │   ├── baseline.py       # BaselineStore — loads examples, computes centroid
 │   ├── detector.py       # DriftDetector — threshold + Page-Hinkley logic
-│   ├── embeddings.py     # EmbeddingAdapter — GeminiEmbeddingAdapter / LocalEmbeddingAdapter
+│   ├── embeddings.py     # EmbeddingAdapter — Gemini / Local / OpenAI Compatible / Deterministic
 │   ├── harness.py        # AgentHarness — session lifecycle, turn capture, JSONL logging
-│   └── cli.py            # run_cli_agent, _cli_entrypoint (driftd command)
+│   ├── sidecar.py        # HTTP Sidecar service
+│   ├── proxy.py          # OpenAI-compatible API Proxy server
+│   └── cli.py            # CLI entrypoint for interactive chat, score, serve and proxy commands
 ├── baselines/
 │   └── default.json      # Default Python/ML-engineering baseline
+├── demo/
+│   ├── index.html        # Interactive HTML client & drift dashboard
+│   ├── preview_desktop.png
+│   └── preview_mobile.png
 ├── experiments/
 │   └── pollutant_validation.py   # Off-topic pollutant grid experiment
 ├── tests/
 │   ├── test_harness.py           # 20 harness regression tests
+│   ├── test_core.py              # Unit tests for baseline, thresholds, and Page-Hinkley blip forgiveness
 │   ├── run_regression.py         # Labelled fixture regression suite
 │   └── fixtures/
 │       └── regression_fixtures.json
@@ -191,18 +200,18 @@ drift-detector/
 
 ---
 
-## Known Limitations (v0.1)
+## Known Limitations (v0.2.0)
 
 | Limitation | Notes |
 |---|---|
 | Factually wrong answers are invisible | Semantic embeddings cannot detect factual inaccuracy within the same domain. A separate fact-checking layer would be required. |
 | Local embedding threshold calibration | `roberta-base` produces very tight clusters on homogeneous baselines, making the auto-threshold too narrow. Use `--threshold` to override or switch to hosted embeddings. |
-| No web UI | v0.1 is CLI-only. A web interface is planned post-QA review. |
 | Single baseline per session | Multi-baseline or dynamic baseline switching is not yet supported. |
 
 ---
 
 ## Roadmap
 
-- **v0.1** *(current)* — self-hosted CLI, pip-installable, for use during QA review
-- **v1.0** *(post-QA)* — fixes from human review, deployment target TBD (PyPI / API wrapper), CHANGELOG, versioned release
+- **v0.1** — Initial proof of concept & validation tests.
+- **v0.2** *(current)* — Subcommands for batch turn scoring (`score`), sidecar HTTP service (`serve`), and OpenAI-compatible completions API proxy (`proxy`), plus interactive Web UI.
+- **v1.0** *(post-QA)* — Human QA sign-off, PyPI packaging, versioned release with git tag and CHANGELOG.

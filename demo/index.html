@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drift Detector — Live Demo</title>
+<style>
+  :root{
+    --text:#2C2C2B; --text2:#7D7A75; --canvas:#FFFFFF; --soft:#F9F8F7;
+    --surface2:#F0EFED; --border:#E6E5E3;
+    --blue:#2783DE; --blue-soft:#E5F2FC;
+    --green:#46A171; --green-soft:#E8F1EC;
+    --orange:#D5803B; --orange-soft:#FBEBDE;
+    --red:#E56458; --red-soft:#FCE9E7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--soft);color:var(--text);font-size:16px;line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 64px}
+  header{margin-bottom:32px}
+  .kicker{display:inline-block;background:var(--blue-soft);color:var(--blue);
+          font-size:13px;font-weight:600;padding:4px 10px;border-radius:6px;margin-bottom:12px}
+  h1{font-size:32px;line-height:1.2;letter-spacing:-0.01em}
+  .sub{color:var(--text2);margin-top:8px;max-width:680px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}.wrap{padding:24px 16px 48px}h1{font-size:26px}}
+  .card{background:var(--canvas);border:1px solid var(--border);border-radius:12px;padding:24px}
+  .card h2{font-size:15px;font-weight:600;color:var(--text2);text-transform:uppercase;
+           letter-spacing:0.04em;margin-bottom:16px}
+  /* chat */
+  #chat{display:flex;flex-direction:column;gap:12px;min-height:280px;max-height:380px;
+        overflow-y:auto;padding-right:4px;margin-bottom:16px}
+  .msg{border:1px solid var(--border);background:var(--soft);border-radius:8px;
+       padding:10px 14px;font-size:14px}
+  .msg .meta{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--text2)}
+  .chip{font-size:12px;font-weight:600;padding:1px 8px;border-radius:10px}
+  .chip.ok{background:var(--green-soft);color:var(--green)}
+  .chip.warn{background:var(--orange-soft);color:var(--orange)}
+  .chip.drift{background:var(--red-soft);color:var(--red)}
+  .chip.base{background:var(--surface2);color:var(--text2)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  textarea{flex:1 1 100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;
+           font:inherit;font-size:14px;resize:vertical;min-height:44px}
+  textarea:focus{outline:2px solid var(--blue);outline-offset:-1px}
+  button{border:1px solid var(--border);background:var(--canvas);color:var(--text);
+         font:inherit;font-size:14px;font-weight:500;padding:10px 16px;border-radius:8px;
+         cursor:pointer;min-height:44px}
+  button:hover{background:var(--soft)}
+  button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  button.primary:hover{background:#1f6fc0}
+  button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  /* meter */
+  .verdict{display:flex;align-items:center;gap:12px;border-radius:8px;padding:14px 16px;
+           font-weight:600;margin-bottom:20px}
+  .verdict.ok{background:var(--green-soft);color:var(--green)}
+  .verdict.drift{background:var(--red-soft);color:var(--red)}
+  .dot{width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
+  canvas{width:100%;height:220px;display:block}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
+  .stat{background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:12px}
+  .stat .v{font-size:22px;font-weight:600;letter-spacing:-0.01em}
+  .stat .l{font-size:12px;color:var(--text2);margin-top:2px}
+  .note{font-size:13px;color:var(--text2);margin-top:16px}
+  footer{margin-top:32px;font-size:13px;color:var(--text2)}
+  a{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="kicker">driftd · live demo</span>
+    <h1>Drift Detector</h1>
+    <p class="sub">Every assistant response is embedded and compared against a baseline of known-good
+    output. A sustained climb in distance raises a drift alarm; a one-turn blip is forgiven.
+    This demo runs entirely in your browser.</p>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Session turns</h2>
+      <div id="chat" aria-live="polite"></div>
+      <div class="controls">
+        <textarea id="input" rows="2" aria-label="Assistant response to score"
+          placeholder="Paste an assistant response to score it…"></textarea>
+        <button class="primary" id="send">Score turn</button>
+        <button id="clean">Simulate clean turn</button>
+        <button id="drifty">Simulate drifting turn</button>
+        <button id="reset">Reset session</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Drift meter</h2>
+      <div id="verdict" class="verdict ok"><span class="dot"></span><span id="verdictText">Session healthy — no sustained drift</span></div>
+      <canvas id="chart" width="960" height="440" role="img"
+              aria-label="Line chart of cosine distance per turn against the calibrated threshold"></canvas>
+      <div class="stats">
+        <div class="stat"><div class="v" id="sTurns">0</div><div class="l">Turns scored</div></div>
+        <div class="stat"><div class="v" id="sDist">–</div><div class="l">Last cosine distance</div></div>
+        <div class="stat"><div class="v" id="sThr">–</div><div class="l">p95 threshold</div></div>
+      </div>
+      <p class="note">Demo embedder: deterministic token hashing (offline, no data leaves the page).
+      The packaged detector swaps in Gemini or any OpenAI-compatible embedding model without
+      touching the detection logic.</p>
+    </section>
+  </div>
+
+  <footer>Baseline: 10 curated finance-domain samples · Metric: cosine on L2-normalised embeddings ·
+  Alarm: Page-Hinkley sustained-trend rule</footer>
+</div>
+
+<script>
+"use strict";
+// ---------- deterministic embedder (mirror of DeterministicProvider) ----------
+const DIM = 128;
+const STOP = new Set("a an and are as at be but by for from had has have he her his i if in into is it its of on or our she so that the their them they this to was we were while will with you your".split(" "));
+function hash32(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function mulberry32(seed){return function(){seed|=0;seed=(seed+0x6D2B79F5)|0;let t=Math.imul(seed^(seed>>>15),1|seed);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}
+const tokenCache=new Map();
+function tokenVec(tok){
+  if(!tokenCache.has(tok)){
+    const rng=mulberry32(hash32(tok)),v=new Float64Array(DIM);
+    for(let i=0;i<DIM;i++){ // Box-Muller for approx normal components
+      const u1=Math.max(rng(),1e-9),u2=rng();
+      v[i]=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+    }
+    tokenCache.set(tok,v);
+  }
+  return tokenCache.get(tok);
+}
+function embed(text){
+  const v=new Float64Array(DIM);
+  for(const t of text.toLowerCase().match(/[a-z0-9']+/g)||[]){
+    if(STOP.has(t))continue;
+    const tv=tokenVec(t);
+    for(let i=0;i<DIM;i++)v[i]+=tv[i];
+  }
+  let n=Math.hypot(...v)||1;
+  for(let i=0;i<DIM;i++)v[i]/=n;
+  return v;
+}
+const cosDist=(a,b)=>{let d=0;for(let i=0;i<DIM;i++)d+=a[i]*b[i];return 1-d;};
+
+// ---------- baseline ----------
+const BASELINE_TEXTS=[
+ "The quarterly budget shows revenue growth across all product lines this year.",
+ "Operating expenses were reduced by renegotiating supplier contracts in the second quarter.",
+ "Cash flow projections indicate we can fund the expansion without additional borrowing.",
+ "The finance team reconciled the ledger and closed the monthly accounts on schedule.",
+ "Gross margin improved after we adjusted pricing on the subscription tiers.",
+ "The audit confirmed that our financial statements comply with reporting standards.",
+ "Investment in the new billing system will pay back within eighteen months.",
+ "Headcount costs remain the largest line item in the operating budget.",
+ "The board approved the capital allocation plan for the next fiscal year.",
+ "Currency fluctuations had a minor impact on consolidated revenue this quarter."];
+function buildBaseline(texts){
+  const embs=texts.map(embed),c=new Float64Array(DIM);
+  for(const e of embs)for(let i=0;i<DIM;i++)c[i]+=e[i];
+  let n=Math.hypot(...c)||1;for(let i=0;i<DIM;i++)c[i]/=n;
+  const d=embs.map(e=>cosDist(e,c)).sort((a,b)=>a-b);
+  const thr=d[Math.min(d.length-1,Math.ceil(0.95*d.length)-1)];
+  return{centroid:c,threshold:thr};
+}
+
+// ---------- Page-Hinkley sustained-trend rule ----------
+class PageHinkley{
+  constructor(delta=0.005,lam=0.1,burnIn=3,sustain=2){Object.assign(this,{delta,lam,burnIn,sustain});this.reset();}
+  reset(){this.n=0;this.mean=0;this.cum=0;this.cumMin=0;this.streak=0;}
+  update(x){
+    this.n++;this.mean+=(x-this.mean)/this.n;
+    this.cum+=x-this.mean-this.delta;this.cumMin=Math.min(this.cumMin,this.cum);
+    const elevated=(this.cum-this.cumMin)>this.lam&&x>this.mean;
+    this.streak=elevated?this.streak+1:0;
+    return this.n>this.burnIn&&this.streak>=this.sustain;
+  }
+}
+
+// ---------- session state ----------
+let baseline,ph,turns;
+function resetSession(){
+  baseline=buildBaseline(BASELINE_TEXTS);ph=new PageHinkley();turns=[];
+  document.getElementById("chat").innerHTML="";render();
+}
+function scoreTurn(text){
+  const d=cosDist(embed(text),baseline.centroid);
+  const alarm=ph.update(d);
+  const breach=d>baseline.threshold;
+  turns.push({text,d,alarm,breach});
+  addMsg(text,d,alarm,breach);render();
+}
+function addMsg(text,d,alarm,breach){
+  const el=document.createElement("div");el.className="msg";
+  const chip=alarm?'<span class="chip drift">drift alarm</span>':breach?'<span class="chip warn">above threshold</span>':'<span class="chip ok">ok</span>';
+  el.innerHTML=`<div>${text.replace(/</g,"&lt;")}</div><div class="meta"><span>turn ${turns.length}</span><span>cos ${d.toFixed(4)}</span>${chip}</div>`;
+  const chat=document.getElementById("chat");chat.appendChild(el);chat.scrollTop=chat.scrollHeight;
+}
+
+// ---------- chart ----------
+function render(){
+  const c=document.getElementById("chart"),ctx=c.getContext("2d");
+  const W=c.width,H=c.height,padL=70,padR=20,padT=20,padB=45;
+  ctx.clearRect(0,0,W,H);
+  const maxY=Math.max(baseline.threshold*1.4,...turns.map(t=>t.d*1.1),0.5);
+  const x=i=>padL+(W-padL-padR)*(turns.length<2?0.5:i/(turns.length-1));
+  const y=v=>padT+(H-padT-padB)*(1-v/maxY);
+  ctx.font="22px -apple-system,Segoe UI,Arial";ctx.fillStyle="#7D7A75";
+  // gridlines
+  ctx.strokeStyle="#E6E5E3";ctx.lineWidth=1;
+  for(let g=0;g<=4;g++){const v=maxY*g/4;ctx.beginPath();ctx.moveTo(padL,y(v));ctx.lineTo(W-padR,y(v));ctx.stroke();ctx.fillText(v.toFixed(2),8,y(v)+7);}
+  // threshold
+  ctx.strokeStyle="#D5803B";ctx.setLineDash([10,8]);ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(padL,y(baseline.threshold));ctx.lineTo(W-padR,y(baseline.threshold));ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle="#D5803B";ctx.fillText("p95 threshold",W-padR-160,y(baseline.threshold)-10);
+  // series
+  if(turns.length){
+    ctx.strokeStyle="#2783DE";ctx.lineWidth=3;ctx.beginPath();
+    turns.forEach((t,i)=>i?ctx.lineTo(x(i),y(t.d)):ctx.moveTo(x(0),y(t.d)));ctx.stroke();
+    turns.forEach((t,i)=>{ctx.fillStyle=t.alarm?"#E56458":t.breach?"#D5803B":"#2783DE";
+      ctx.beginPath();ctx.arc(x(i),y(t.d),7,0,7);ctx.fill();});
+  }
+  ctx.fillStyle="#7D7A75";ctx.fillText("turn",W/2-20,H-10);
+  // verdict + stats
+  const drifted=turns.some(t=>t.alarm);
+  const v=document.getElementById("verdict");
+  v.className="verdict "+(drifted?"drift":"ok");
+  document.getElementById("verdictText").textContent=drifted
+    ?"Sustained drift detected — consider compacting or resetting context"
+    :"Session healthy — no sustained drift";
+  document.getElementById("sTurns").textContent=turns.length;
+  document.getElementById("sDist").textContent=turns.length?turns[turns.length-1].d.toFixed(4):"–";
+  document.getElementById("sThr").textContent=baseline.threshold.toFixed(4);
+}
+
+// ---------- demo content ----------
+const CLEAN=["Next quarter's budget keeps operating expenses flat while revenue grows modestly.",
+ "We reconciled the accounts and the ledger balances match the bank statements.",
+ "Margin improvements come mostly from the renegotiated supplier contracts.",
+ "The capital allocation plan funds the billing system upgrade this fiscal year."];
+const DRIFTY=["The dragon soared over the misty mountains while the wizard chanted ancient spells.",
+ "Elves and goblins clashed in the enchanted forest under the blood moon.",
+ "The ancient prophecy foretold the return of the shadow king to the realm.",
+ "Glowing runes covered the castle walls as the phoenix screamed at dawn."];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+document.getElementById("send").onclick=()=>{const t=document.getElementById("input").value.trim();if(t){scoreTurn(t);document.getElementById("input").value="";}};
+document.getElementById("clean").onclick=()=>scoreTurn(pick(CLEAN));
+document.getElementById("drifty").onclick=()=>scoreTurn(pick(DRIFTY));
+document.getElementById("reset").onclick=resetSession;
+
+resetSession();
+// preload a story: three clean turns, then sustained drift
+[CLEAN[0],CLEAN[1],CLEAN[2],DRIFTY[0],DRIFTY[1],DRIFTY[2]].forEach(scoreTurn);
+</script>
+</body>
+</html>
