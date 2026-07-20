@@ -38,6 +38,11 @@ def main():
         help="Show full metric block alongside drift notices (default: single-line notice only)."
     )
     parser.add_argument(
+        "--mock-chat",
+        action="store_true",
+        help="Run the chat agent in offline mock mode (no Gemini API calls)."
+    )
+    parser.add_argument(
         "--provider",
         choices=["hosted", "local"],
         default="hosted",
@@ -52,13 +57,14 @@ def main():
     args = parser.parse_args()
     
     run_cli_agent(
-        args.baseline,
-        args.threshold,
-        args.metric,
-        args.use_trend,
-        args.provider,
-        args.local_model,
-        args.detailed
+        baseline_file=args.baseline,
+        threshold=args.threshold,
+        metric=args.metric,
+        use_trend=args.use_trend,
+        embedding_provider=args.provider,
+        local_model_name=args.local_model,
+        detailed=args.detailed,
+        mock_chat=args.mock_chat,
     )
 
 if __name__ == "__main__":

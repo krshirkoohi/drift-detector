@@ -69,6 +69,29 @@ def _print_drift_notice(metrics: Dict[str, Any], use_trend: bool, detailed: bool
         print("\n  ⚠  Drift detected — agent may be going off-topic.\n")
 
 
+def generate_mock_response(prompt: str) -> str:
+    """Generate a mock agent response offline for testing/demonstration."""
+    import random
+    prompt_lower = prompt.lower()
+    fantasy_keywords = ["drift", "dragon", "spell", "wizard", "magic", "fantasy", "off-topic", "story", "game"]
+    if any(k in prompt_lower for k in fantasy_keywords):
+        drift_options = [
+            "The dragon soared over the misty mountains while the wizard chanted ancient spells at dawn.",
+            "Elves and goblins clashed in the enchanted forest under the blood moon.",
+            "The ancient prophecy foretold the return of the shadow king to the realm.",
+            "Glowing runes covered the castle walls as the phoenix screamed at dawn."
+        ]
+        return random.choice(drift_options)
+    else:
+        clean_options = [
+            "Next quarter's budget keeps operating expenses flat while revenue grows modestly.",
+            "We reconciled the accounts and the ledger balances match the bank statements.",
+            "Margin improvements come mostly from the renegotiated supplier contracts.",
+            "The capital allocation plan funds the billing system upgrade this fiscal year."
+        ]
+        return random.choice(clean_options)
+
+
 def run_cli_agent(
     baseline_file: str,
     threshold: Optional[float] = None,
@@ -77,9 +100,10 @@ def run_cli_agent(
     embedding_provider: str = "hosted",
     local_model_name: str = "roberta-base",
     detailed: bool = False,
+    mock_chat: bool = False,
 ) -> None:
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
+    if not mock_chat and not api_key:
         print("❌ Error: GEMINI_API_KEY environment variable is not set.")
         sys.exit(1)
 
@@ -90,9 +114,12 @@ def run_cli_agent(
     
     try:
         from .embeddings import GeminiEmbeddingAdapter, LocalEmbeddingAdapter
-        if embedding_provider.lower() == "local":
-            print(f"Using local embedding provider: {local_model_name}...")
-            adapter = LocalEmbeddingAdapter(local_model_name)
+        if embedding_provider.lower() == "local" or mock_chat:
+            # For mock chat we can use the local/deterministic provider if we don't have API keys
+            prov = "local" if embedding_provider.lower() == "local" else "deterministic"
+            print(f"Using local/deterministic embedding provider...")
+            from .embeddings import get_adapter
+            adapter = get_adapter(prov)
         else:
             print("Using hosted Gemini embedding provider...")
             adapter = GeminiEmbeddingAdapter(api_key)
@@ -132,7 +159,10 @@ def run_cli_agent(
 
         print("Agent > Thinking...", end="\r")
         try:
-            response = generate_gemini_response(prompt, history, api_key)
+            if mock_chat:
+                response = generate_mock_response(prompt)
+            else:
+                response = generate_gemini_response(prompt, history, api_key)
             # Clear "Thinking..." line
             print("Agent > " + " " * 30, end="\r")
             
@@ -270,6 +300,11 @@ def _cli_entrypoint() -> None:
         action="store_true",
         help="Show full metric block on drift notices (default: single-line notice only)",
     )
+    parser.add_argument(
+        "--mock-chat",
+        action="store_true",
+        help="Run the chat agent in offline mock mode (no Gemini API calls)",
+    )
 
     args = parser.parse_args()
     run_cli_agent(
@@ -280,5 +315,6 @@ def _cli_entrypoint() -> None:
         embedding_provider=args.provider,
         local_model_name=args.local_model,
         detailed=args.detailed,
+        mock_chat=args.mock_chat,
     )
 
