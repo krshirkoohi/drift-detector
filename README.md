@@ -4,6 +4,8 @@
 
 > **Scope:** driftd measures *semantic and topic consistency* — it is a quality-consistency tool, not a fact-checker. It detects when an agent drifts off-topic or changes domain; it cannot verify whether an answer is factually correct.
 
+> 🚨 **CAUTION:** The GitHub repository for this project is public. Because baseline candidate chats are committed to git and pushed to GitHub, do NOT include any sensitive, credential-related, or controversial data inside the baseline files.
+
 ---
 
 ## Quick Start
@@ -35,6 +37,13 @@ driftd --baseline baselines/default.json
 ```
 
 That's it. Start chatting — you'll see an inline notice if the agent goes off-topic, and nothing otherwise.
+
+### Web Demo
+
+You can try the interactive web demo [here](https://krshirkoohi.github.io/drift-detector/) (or by opening `demo/index.html`).
+
+![Desktop Demo](demo/preview_desktop.png)
+![Mobile Demo](demo/preview_mobile.png)
 
 ---
 
