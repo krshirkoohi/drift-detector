@@ -13,6 +13,9 @@ from .embeddings import (
     get_adapter,
 )
 from .harness import AgentHarness, TurnRecord, SessionSummary
+from .models import DriftVerdict
+from .session import DriftSession
+from .storage import BaselineStorage, SessionLogger
 
 __all__ = [
     "BaselineStore",
@@ -27,4 +30,8 @@ __all__ = [
     "AgentHarness",
     "TurnRecord",
     "SessionSummary",
+    "DriftVerdict",
+    "DriftSession",
+    "BaselineStorage",
+    "SessionLogger",
 ]

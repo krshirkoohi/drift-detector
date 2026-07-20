@@ -1,11 +1,20 @@
-import json
-import os
-import urllib.request
+"""
+baseline.py — Legacy compatibility wrapper for the baseline store.
+
+Delegates baseline serialisation to the new BaselineStorage class.
+"""
 from typing import List, Optional
 import numpy as np
+
 from .embeddings import EmbeddingAdapter
+from .storage import BaselineStorage
 
 class BaselineStore:
+    """
+    Legacy class providing backward compatibility for baseline management.
+    
+    Delegates file I/O to the new BaselineStorage class.
+    """
     def __init__(self, baseline_path: Optional[str] = None):
         self.baseline_path = baseline_path
         self.name: str = "default"
@@ -24,17 +33,14 @@ class BaselineStore:
         store.examples = examples
         return store
 
-
     def load_baseline(self) -> None:
         """Load curated examples from the JSON baseline file."""
-        if not os.path.exists(self.baseline_path):
-            raise FileNotFoundError(f"Baseline file not found at: {self.baseline_path}")
-            
-        with open(self.baseline_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            self.name = data.get("name", "default")
-            self.description = data.get("description", "")
-            self.examples = data.get("examples", [])
+        if not self.baseline_path:
+            return
+        data = BaselineStorage.load(self.baseline_path)
+        self.name = data["name"]
+        self.description = data["description"]
+        self.examples = data["examples"]
 
     def compute_centroid(
         self, 
@@ -108,10 +114,11 @@ class BaselineStore:
         common = [w for w, _ in Counter(words).most_common(4)]
         return ", ".join(common)
 
-
     @staticmethod
     def get_embedding(text: str, api_key: str) -> List[float]:
         """Fetch the embedding for a given text from the Gemini API."""
+        import urllib.request
+        import json
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key={api_key}"
         payload = {
             "content": {
@@ -132,6 +139,4 @@ class BaselineStore:
                 res = json.loads(response.read().decode("utf-8"))
                 return res["embedding"]["values"]
         except Exception as e:
-            # Re-raise with a clear message to aid debugging
             raise RuntimeError(f"Failed to fetch Gemini embedding: {e}")
-
