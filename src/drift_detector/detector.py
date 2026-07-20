@@ -86,6 +86,42 @@ class DriftDetector:
         return self._session.has_drifted
         
     @property
+    def ph_n(self) -> int:
+        """Get the current turn index (Page-Hinkley n)."""
+        return self._session.ph_n
+        
+    @ph_n.setter
+    def ph_n(self, value: int) -> None:
+        self._session.ph_n = value
+
+    @property
+    def ph_running_mean(self) -> float:
+        """Get Page-Hinkley running mean distance."""
+        return self._session.ph_running_mean
+        
+    @ph_running_mean.setter
+    def ph_running_mean(self, value: float) -> None:
+        self._session.ph_running_mean = value
+
+    @property
+    def ph_running_sum(self) -> float:
+        """Get Page-Hinkley running sum."""
+        return self._session.ph_running_sum
+        
+    @ph_running_sum.setter
+    def ph_running_sum(self, value: float) -> None:
+        self._session.ph_running_sum = value
+
+    @property
+    def ph_min_sum(self) -> float:
+        """Get Page-Hinkley running minimum sum."""
+        return self._session.ph_min_sum
+        
+    @ph_min_sum.setter
+    def ph_min_sum(self, value: float) -> None:
+        self._session.ph_min_sum = value
+        
+    @property
     def history(self) -> List[TurnScore]:
         """Convert new session history back to legacy TurnScore list for compatibility."""
         legacy_history = []
