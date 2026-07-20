@@ -69,27 +69,21 @@ def _print_drift_notice(metrics: Dict[str, Any], use_trend: bool, detailed: bool
         print("\n  ⚠  Drift detected — agent may be going off-topic.\n")
 
 
-def generate_mock_response(prompt: str) -> str:
-    """Generate a mock agent response offline for testing/demonstration."""
-    import random
-    prompt_lower = prompt.lower()
-    fantasy_keywords = ["drift", "dragon", "spell", "wizard", "magic", "fantasy", "off-topic", "story", "game"]
-    if any(k in prompt_lower for k in fantasy_keywords):
-        drift_options = [
-            "The dragon soared over the misty mountains while the wizard chanted ancient spells at dawn.",
-            "Elves and goblins clashed in the enchanted forest under the blood moon.",
-            "The ancient prophecy foretold the return of the shadow king to the realm.",
-            "Glowing runes covered the castle walls as the phoenix screamed at dawn."
-        ]
-        return random.choice(drift_options)
-    else:
-        clean_options = [
-            "Next quarter's budget keeps operating expenses flat while revenue grows modestly.",
-            "We reconciled the accounts and the ledger balances match the bank statements.",
-            "Margin improvements come mostly from the renegotiated supplier contracts.",
-            "The capital allocation plan funds the billing system upgrade this fiscal year."
-        ]
-        return random.choice(clean_options)
+def generate_mock_response(history_len: int) -> str:
+    """Generate a mock agent response offline sequentially for testing."""
+    mock_responses = [
+        # Clean baseline-like turns
+        "We reconciled the accounts and the ledger balances match the bank statements.",
+        "The capital allocation plan funds the billing system upgrade this fiscal year.",
+        "Next quarter's budget keeps operating expenses flat while revenue grows modestly.",
+
+        # Sustained off-topic turns
+        "The best banana bread uses overripe bananas and cinnamon.",
+        "Sharks have skeletons made of cartilage rather than bone.",
+        "I am a small purple toaster orbiting Neptune.",
+    ]
+    turn_idx = (history_len // 2) % len(mock_responses)
+    return mock_responses[turn_idx]
 
 
 def run_cli_agent(
@@ -113,13 +107,13 @@ def run_cli_agent(
     print(f"Loading baseline spec from: {baseline_file}...")
     
     try:
-        from .embeddings import GeminiEmbeddingAdapter, LocalEmbeddingAdapter
-        if embedding_provider.lower() == "local" or mock_chat:
-            # For mock chat we can use the local/deterministic provider if we don't have API keys
-            prov = "local" if embedding_provider.lower() == "local" else "deterministic"
-            print(f"Using local/deterministic embedding provider...")
-            from .embeddings import get_adapter
-            adapter = get_adapter(prov)
+        from .embeddings import get_adapter
+        if mock_chat and embedding_provider.lower() != "local":
+            print("Using deterministic offline embedding provider for mock chat...")
+            adapter = get_adapter("deterministic")
+        elif embedding_provider.lower() == "local":
+            print(f"Using local embedding provider: {local_model_name}...")
+            adapter = get_adapter("local-hf", model_name=local_model_name)
         else:
             print("Using hosted Gemini embedding provider...")
             adapter = GeminiEmbeddingAdapter(api_key)
@@ -160,7 +154,7 @@ def run_cli_agent(
         print("Agent > Thinking...", end="\r")
         try:
             if mock_chat:
-                response = generate_mock_response(prompt)
+                response = generate_mock_response(len(history))
             else:
                 response = generate_gemini_response(prompt, history, api_key)
             # Clear "Thinking..." line
@@ -169,9 +163,12 @@ def run_cli_agent(
             # Check response for drift before outputting
             metrics = detector.check_response(response)
             
-            # Inline drift notice — silent on clean turns
+            # Inline drift notice
             if metrics["is_drifting"]:
                 _print_drift_notice(metrics, use_trend, detailed)
+            elif detailed:
+                d_val = metrics["cosine_distance"] if metrics["metric"] == "cosine" else metrics["euclidean_distance"]
+                print(f"  [driftd status] turn {detector.ph_n} | {metrics['metric']} dist: {d_val:.4f} | threshold: {metrics['threshold']:.4f} (healthy)")
                 
             print(f"Agent > {response}\n")
             
