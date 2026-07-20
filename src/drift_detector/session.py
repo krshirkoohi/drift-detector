@@ -128,6 +128,8 @@ class DriftSession:
         calibrated_threshold = threshold
         if calibrated_threshold is None:
             calibrated_threshold = float(np.percentile(dists, 95.0))
+            if calibrated_threshold < 0.01:
+                calibrated_threshold = 0.01
             
         # 3. Calibrate Page-Hinkley parameters
         std_dev = float(np.std(dists))
