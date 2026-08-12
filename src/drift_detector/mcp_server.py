@@ -68,24 +68,31 @@ def drift_attach_session(
     store = BaselineStore(baseline_path)
     examples = store.examples
     
-    # Resolve embedding adapter
-    if provider == "hosted":
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if api_key:
-            adapter = GeminiEmbeddingAdapter(api_key=api_key)
-        else:
-            adapter = DeterministicEmbeddingAdapter()
+    # Resolve embedding adapter with fallback
+    if provider == "hosted" and os.environ.get("GEMINI_API_KEY"):
+        adapter = GeminiEmbeddingAdapter(api_key=os.environ["GEMINI_API_KEY"])
     elif provider == "local":
         adapter = LocalEmbeddingAdapter()
     else:
         adapter = DeterministicEmbeddingAdapter()
         
-    _active_session = DriftSession.initialise(
-        known_good_responses=examples,
-        embedding_adapter=adapter,
-        metric=metric,
-        use_trend=True,
-    )
+    try:
+        _active_session = DriftSession.initialise(
+            known_good_responses=examples,
+            embedding_adapter=adapter,
+            metric=metric,
+            use_trend=True,
+        )
+    except Exception as err:
+        # Fallback to offline deterministic adapter if hosted fails
+        adapter = DeterministicEmbeddingAdapter()
+        _active_session = DriftSession.initialise(
+            known_good_responses=examples,
+            embedding_adapter=adapter,
+            metric=metric,
+            use_trend=True,
+        )
+        
     _eval_interval = eval_every_n_turns
     _turn_counter = 0
     _batch_buffer = []
@@ -115,7 +122,13 @@ def drift_evaluate_turn(agent_response: str, user_prompt: str = "") -> str:
         return json.dumps({"status": "buffering", "turn": _turn_counter, "eval_every": _eval_interval})
         
     # Evaluate response with DriftSession
-    verdict = _active_session.observe(agent_response)
+    try:
+        verdict = _active_session.observe(agent_response)
+    except Exception:
+        # Fallback adapter if embedding API fails
+        _active_session.embedding_adapter = DeterministicEmbeddingAdapter()
+        verdict = _active_session.observe(agent_response)
+
     is_drifting = (verdict.distance > verdict.threshold) or verdict.drift_detected
     
     # If clean, stay invisible in background
