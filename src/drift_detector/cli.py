@@ -200,12 +200,18 @@ def run_subcommands(argv: list[str]) -> None:
     sub.add_parser("serve", help="run sidecar service (see drift_detector.sidecar --help)")
     sub.add_parser("proxy", help="run drift proxy (see drift_detector.proxy --help)")
     sub.add_parser("mcp", help="run drift MCP server (Model Context Protocol)")
+    sub.add_parser("eval", help="run performance evaluation & benchmark")
 
     args, rest = p.parse_known_args(argv)
     
     if args.command == "mcp":
         from . import mcp_server
         mcp_server.main()
+        return
+    elif args.command == "eval":
+        from . import eval
+        sys.argv = ["driftd-eval", *rest]
+        eval.main()
         return
     elif args.command == "serve":
         from . import sidecar
@@ -254,7 +260,7 @@ def _cli_entrypoint() -> None:
         driftd mcp
     """
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] in ("serve", "proxy", "score", "mcp"):
+    if len(sys.argv) > 1 and sys.argv[1] in ("serve", "proxy", "score", "mcp", "eval"):
         run_subcommands(sys.argv[1:])
         return
 
