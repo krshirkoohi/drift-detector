@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +34,7 @@ dev = [
 
 [project.scripts]
 driftd = "drift_detector.cli:_cli_entrypoint"
+drift-detector-mcp = "drift_detector.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
