@@ -40,33 +40,10 @@ def generate_gemini_response(prompt: str, history: List[Dict[str, Any]], api_key
         raise RuntimeError(f"Gemini API request failed: {e}")
 
 def _print_drift_notice(metrics: Dict[str, Any], use_trend: bool, detailed: bool) -> None:
-    """Print an inline drift notice to stdout.
-
-    In default mode a single line is printed.  In detailed mode the full
-    metric block is appended on the lines immediately following.
-    Silent on clean turns — this function must only be called when
-    ``metrics['is_drifting']`` is True.
-    """
-    if detailed:
-        # ── Detailed mode: notice + metric block ─────────────────────────
-        print("\n" + "─" * 54)
-        if use_trend:
-            print("  ⚠  Drift detected  (sustained trend)")
-            print(f"     PH statistic : {metrics['ph_statistic']:.4f}  "
-                  f"(threshold {metrics['ph_threshold']:.4f})")
-            print(f"     Running mean : {metrics['ph_running_mean']:.4f}")
-        else:
-            print("  ⚠  Drift detected  (threshold exceeded)")
-            print(f"     {metrics['metric'].upper()} distance : "
-                  f"{metrics['cosine_distance' if metrics['metric'] == 'cosine' else 'euclidean_distance']:.4f}  "
-                  f"(threshold {metrics['threshold']:.4f})")
-            print(f"     Cosine / Euclidean : "
-                  f"{metrics['cosine_distance']:.4f} / {metrics['euclidean_distance']:.4f}")
-        print(f"     Latency        : {metrics['latency_ms']:.0f}ms")
-        print("─" * 54 + "\n")
-    else:
-        # ── Default mode: one clean inline line ───────────────────────────
-        print("\n  ⚠  Drift detected — agent may be going off-topic.\n")
+    """Print an inline status bar drift notice to stdout."""
+    dist_val = metrics["cosine_distance"] if metrics["metric"] == "cosine" else metrics["euclidean_distance"]
+    ph_str = f" · PH Sk: {metrics['ph_statistic']:.4f}" if use_trend and "ph_statistic" in metrics else ""
+    print(f"\n🔴 [driftd] ⚠ DRIFT DETECTED · {metrics['metric'].upper()} dist: {dist_val:.4f} (threshold: {metrics['threshold']:.4f}){ph_str} · recommend context reset\n")
 
 
 def generate_mock_response(history_len: int) -> str:

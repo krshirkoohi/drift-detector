@@ -141,20 +141,14 @@ def drift_evaluate_turn(agent_response: str, user_prompt: str = "") -> str:
             "drift_detected": False,
         })
         
-    # If drift detected, generate warning popup formatted for display under text box
-    warning_popup = (
-        "\n"
-        "┌──────────────────────────────────────────────────────────┐\n"
-        f"│ ⚠️  DRIFT DETECTED — turn {_turn_counter} is going off-topic!       │\n"
-        "├──────────────────────────────────────────────────────────┤\n"
-        f"│ Metric           : {verdict.metric.upper()}                              │\n"
-        f"│ Distance         : {verdict.cosine_distance if verdict.metric == 'cosine' else verdict.euclidean_distance:.4f} (Threshold: {verdict.threshold:.4f})     │\n"
-        f"│ Page-Hinkley Sk  : {verdict.trend_statistic:.4f}                          │\n"
-        f"│ Recommend Fresh  : {'Yes' if is_drifting else 'No'}                                 │\n"
-        "└──────────────────────────────────────────────────────────┘\n"
+    # If drift detected, generate single-line status bar indicator (matching terminal IDE footers)
+    warning_status_bar = (
+        f"\n🔴 [driftd] ⚠ DRIFT DETECTED · turn {_turn_counter} · "
+        f"{verdict.metric.upper()} dist: {verdict.cosine_distance if verdict.metric == 'cosine' else verdict.euclidean_distance:.4f} "
+        f"(threshold: {verdict.threshold:.4f}) · Page-Hinkley Sk: {verdict.trend_statistic:.4f} · recommend context reset\n"
     )
     
-    return warning_popup
+    return warning_status_bar
 
 
 @mcp.tool()
