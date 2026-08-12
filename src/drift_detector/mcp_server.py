@@ -45,6 +45,7 @@ def drift_attach_session(
     metric: str = "cosine",
     provider: str = "hosted",
     notice_mode: str = "simple",
+    warm_up_turns: int = 20,
 ) -> str:
     """Attach drift-detector to an active chat session and set evaluation baseline.
     
@@ -54,6 +55,7 @@ def drift_attach_session(
         metric: Distance metric ('cosine' or 'euclidean').
         provider: Embedding provider ('hosted', 'local', or 'deterministic').
         notice_mode: Verbosity level for drift alerts ('simple' or 'advanced').
+        warm_up_turns: Number of initial turns to listen for to build local baseline index (default 20).
     """
     global _active_session, _eval_interval, _turn_counter, _batch_buffer, _notice_mode
     _notice_mode = notice_mode.lower()
@@ -66,18 +68,18 @@ def drift_attach_session(
     else:
         adapter = DeterministicEmbeddingAdapter()
 
-    # Dynamic Auto-Baseline (Self-Referential Conversation Baseline)
+    # Dynamic Auto-Baseline (Self-Referential Conversation Baseline per handwritten spec)
     if baseline_name_or_path.lower() in ("auto", "self"):
         _active_session = DriftSession.initialise_auto(
             embedding_adapter=adapter,
-            warm_up_turns=2,
+            warm_up_turns=warm_up_turns,
             metric=metric,
             use_trend=True,
         )
         _eval_interval = eval_every_n_turns
         _turn_counter = 0
         _batch_buffer = []
-        return f"Attached to dynamic session. Baseline: AUTO (capturing initial 2 turns of this conversation). Notice mode: '{_notice_mode}'."
+        return f"Attached to dynamic session. Baseline: AUTO (listening for initial {warm_up_turns} turns of this conversation). Notice mode: '{_notice_mode}'."
     
     # Static Preset Baseline Path
     if os.path.exists(baseline_name_or_path):

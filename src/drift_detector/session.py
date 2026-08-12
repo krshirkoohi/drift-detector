@@ -60,9 +60,9 @@ class DriftSession:
         self.history: List[DriftVerdict] = []
         self.logger = SessionLogger(log_dir) if log_dir else None
         
-        # Dynamic Auto-Baseline parameters
+        # Dynamic Auto-Baseline parameters per chat (Handwritten Spec: n=20 turns)
         self.is_auto: bool = False
-        self.warm_up_turns: int = 2
+        self.warm_up_turns: int = 20
         self.auto_ready: bool = False
         self.auto_embeddings: List[np.ndarray] = []
 
@@ -70,7 +70,7 @@ class DriftSession:
     def initialise_auto(
         cls,
         embedding_adapter: EmbeddingAdapter,
-        warm_up_turns: int = 2,
+        warm_up_turns: int = 20,
         name: str = "auto-session",
         metric: str = "cosine",
         threshold: Optional[float] = None,
@@ -79,7 +79,7 @@ class DriftSession:
         ph_burn_in: int = 0,
         log_dir: Optional[str] = None,
     ) -> "DriftSession":
-        """Initialise a DriftSession that auto-captures the current conversation initial turns as its baseline."""
+        """Initialise a DriftSession that listens for first n=20 responses per chat to build baseline index."""
         dim = getattr(embedding_adapter, 'dimension', 768)
         dummy_vec = np.zeros(dim)
         session = cls(
