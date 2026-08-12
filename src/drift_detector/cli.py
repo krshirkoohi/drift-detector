@@ -135,7 +135,9 @@ def run_cli_agent(
         sys.exit(1)
 
     history: List[Dict[str, Any]] = []
+    detector_enabled: bool = True
     print("\nSystem: You can now converse with the agent. Type 'exit' to quit.")
+    print("System: Type '/toggle' or '/drift' to turn background detection ON/OFF. Type '/status' for metrics.")
     print("====================================================\n")
 
     while True:
@@ -150,6 +152,24 @@ def run_cli_agent(
         if prompt.lower() in ("exit", "quit"):
             print("Exiting...")
             break
+        if prompt.lower() in ("/toggle", "/drift", "/drift toggle"):
+            detector_enabled = not detector_enabled
+            state_str = "ENABLED ✅" if detector_enabled else "PAUSED ⏸️"
+            print(f"\n  [driftd] Drift detector monitoring is now {state_str}\n")
+            continue
+        if prompt.lower() in ("/drift on", "/on"):
+            detector_enabled = True
+            print("\n  [driftd] Drift detector monitoring is ENABLED ✅\n")
+            continue
+        if prompt.lower() in ("/drift off", "/off"):
+            detector_enabled = False
+            print("\n  [driftd] Drift detector monitoring is PAUSED ⏸️\n")
+            continue
+        if prompt.lower() in ("/status", "/metrics"):
+            summary = detector.summary()
+            state_str = "ENABLED ✅" if detector_enabled else "PAUSED ⏸️"
+            print(f"\n  [driftd status] Status: {state_str} | Observed Turns: {summary.get('turns', 0)} | Drifted: {summary.get('drifted_turns', 0)} | Topic Focus: {summary.get('topic_focus')}\n")
+            continue
 
         print("Agent > Thinking...", end="\r")
         try:
@@ -160,15 +180,15 @@ def run_cli_agent(
             # Clear "Thinking..." line
             print("Agent > " + " " * 30, end="\r")
             
-            # Check response for drift before outputting
-            metrics = detector.check_response(response)
-            
-            # Inline drift notice
-            if metrics["is_drifting"]:
-                _print_drift_notice(metrics, use_trend, detailed)
-            elif detailed:
-                d_val = metrics["cosine_distance"] if metrics["metric"] == "cosine" else metrics["euclidean_distance"]
-                print(f"  [driftd status] turn {detector.ph_n} | {metrics['metric']} dist: {d_val:.4f} | threshold: {metrics['threshold']:.4f} (healthy)")
+            # Check response for drift before outputting if enabled
+            if detector_enabled:
+                metrics = detector.check_response(response)
+                # Inline drift notice
+                if metrics["is_drifting"]:
+                    _print_drift_notice(metrics, use_trend, detailed)
+                elif detailed:
+                    d_val = metrics["cosine_distance"] if metrics["metric"] == "cosine" else metrics["euclidean_distance"]
+                    print(f"  [driftd status] turn {detector.ph_n} | {metrics['metric']} dist: {d_val:.4f} | threshold: {metrics['threshold']:.4f} (healthy)")
                 
             print(f"Agent > {response}\n")
             
