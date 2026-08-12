@@ -59,6 +59,49 @@ class DriftSession:
         
         self.history: List[DriftVerdict] = []
         self.logger = SessionLogger(log_dir) if log_dir else None
+        
+        # Dynamic Auto-Baseline parameters
+        self.is_auto: bool = False
+        self.warm_up_turns: int = 2
+        self.auto_ready: bool = False
+        self.auto_embeddings: List[np.ndarray] = []
+
+    @classmethod
+    def initialise_auto(
+        cls,
+        embedding_adapter: EmbeddingAdapter,
+        warm_up_turns: int = 2,
+        name: str = "auto-session",
+        metric: str = "cosine",
+        threshold: Optional[float] = None,
+        use_trend: bool = False,
+        ph_sustain: int = 1,
+        ph_burn_in: int = 0,
+        log_dir: Optional[str] = None,
+    ) -> "DriftSession":
+        """Initialise a DriftSession that auto-captures the current conversation initial turns as its baseline."""
+        dim = getattr(embedding_adapter, 'dimension', 768)
+        dummy_vec = np.zeros(dim)
+        session = cls(
+            name=name,
+            examples=[],
+            embeddings=np.array([dummy_vec]),
+            centroid=dummy_vec,
+            embedding_adapter=embedding_adapter,
+            threshold=threshold if threshold is not None else 0.45,
+            metric=metric,
+            use_trend=use_trend,
+            ph_delta=0.01,
+            ph_threshold=0.05,
+            ph_sustain=ph_sustain,
+            ph_burn_in=ph_burn_in,
+            log_dir=log_dir,
+        )
+        session.is_auto = True
+        session.warm_up_turns = max(1, warm_up_turns)
+        session.auto_ready = False
+        session.auto_embeddings = []
+        return session
 
     @classmethod
     def initialise(
@@ -166,6 +209,35 @@ class DriftSession:
         # 1. Fetch response embedding
         response_emb_list = self.embedding_adapter.embed(response_text)
         response_emb = np.array(response_emb_list)
+        
+        # Auto-baseline dynamic centroid calculation during warm-up phase
+        if self.is_auto and not self.auto_ready:
+            self.auto_embeddings.append(response_emb)
+            if len(self.auto_embeddings) >= self.warm_up_turns:
+                self.centroid = np.mean(self.auto_embeddings, axis=0)
+                # Compute centroid variance to auto-calibrate threshold
+                dists = [cosine_distance(vec, self.centroid) for vec in self.auto_embeddings]
+                self.threshold = float(np.percentile(dists, 95)) if len(dists) > 1 else 0.45
+                self.auto_ready = True
+            
+            latency_ms = (time.time() - start_time) * 1000
+            return DriftVerdict(
+                distance=0.0,
+                trend_statistic=0.0,
+                drift_detected=False,
+                recommend_fresh_chat=False,
+                turn_index=len(self.auto_embeddings),
+                threshold=self.threshold,
+                metric=self.metric,
+                cosine_distance=0.0,
+                euclidean_distance=0.0,
+                ph_running_mean=0.0,
+                ph_running_sum=0.0,
+                ph_min_sum=0.0,
+                ph_threshold=self.ph_threshold,
+                ph_delta=self.ph_delta,
+                latency_ms=latency_ms
+            )
         
         # 2. Compute similarity & distance
         cos_dist = cosine_distance(response_emb, self.centroid)

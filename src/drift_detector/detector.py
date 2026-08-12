@@ -60,24 +60,34 @@ class DriftDetector:
         else:
             self.embedding_adapter = embedding_adapter
 
-        # Ensure baseline store has computed centroid
-        if self.baseline_store.centroid is None:
-            self.baseline_store.compute_centroid(adapter=self.embedding_adapter)
-            
-        # Standard calibration
-        self._session = DriftSession.initialise(
-            known_good_responses=self.baseline_store.examples,
-            embedding_adapter=self.embedding_adapter,
-            name=self.baseline_store.name,
-            metric=self.metric,
-            threshold=threshold,
-            use_trend=self.use_trend,
-            ph_sustain=ph_sustain,
-            ph_burn_in=ph_burn_in,
-            log_dir=self.log_dir,
-            embeddings=self.baseline_store.embeddings,
-            centroid=self.baseline_store.centroid
-        )
+        if baseline_store is None or not getattr(baseline_store, "centroid", None) and not getattr(baseline_store, "examples", None):
+            self._session = DriftSession.initialise_auto(
+                embedding_adapter=self.embedding_adapter,
+                warm_up_turns=2,
+                metric=self.metric,
+                threshold=threshold,
+                use_trend=self.use_trend,
+                ph_sustain=ph_sustain,
+                ph_burn_in=ph_burn_in,
+                log_dir=self.log_dir,
+            )
+        else:
+            if self.baseline_store.centroid is None:
+                self.baseline_store.compute_centroid(adapter=self.embedding_adapter)
+                
+            self._session = DriftSession.initialise(
+                known_good_responses=self.baseline_store.examples,
+                embedding_adapter=self.embedding_adapter,
+                name=self.baseline_store.name,
+                metric=self.metric,
+                threshold=threshold,
+                use_trend=self.use_trend,
+                ph_sustain=ph_sustain,
+                ph_burn_in=ph_burn_in,
+                log_dir=self.log_dir,
+                embeddings=self.baseline_store.embeddings,
+                centroid=self.baseline_store.centroid
+            )
         
         # Sync attributes for backwards compatibility
         self.threshold = self._session.threshold

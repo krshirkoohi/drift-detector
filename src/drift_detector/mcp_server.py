@@ -40,7 +40,7 @@ def drift_session_init_guidance() -> str:
 
 @mcp.tool()
 def drift_attach_session(
-    baseline_name_or_path: str = "default",
+    baseline_name_or_path: str = "auto",
     eval_every_n_turns: int = 1,
     metric: str = "cosine",
     provider: str = "hosted",
@@ -49,7 +49,7 @@ def drift_attach_session(
     """Attach drift-detector to an active chat session and set evaluation baseline.
     
     Args:
-        baseline_name_or_path: Name of preset baseline (e.g. 'default') or path to JSON file.
+        baseline_name_or_path: Name of preset baseline (e.g. 'auto', 'default') or path to JSON file.
         eval_every_n_turns: Evaluate every N turns (default 1).
         metric: Distance metric ('cosine' or 'euclidean').
         provider: Embedding provider ('hosted', 'local', or 'deterministic').
@@ -58,11 +58,31 @@ def drift_attach_session(
     global _active_session, _eval_interval, _turn_counter, _batch_buffer, _notice_mode
     _notice_mode = notice_mode.lower()
     
-    # Resolve baseline path
+    # Resolve embedding adapter with fallback
+    if provider == "hosted" and os.environ.get("GEMINI_API_KEY"):
+        adapter = GeminiEmbeddingAdapter(api_key=os.environ["GEMINI_API_KEY"])
+    elif provider == "local":
+        adapter = LocalEmbeddingAdapter()
+    else:
+        adapter = DeterministicEmbeddingAdapter()
+
+    # Dynamic Auto-Baseline (Self-Referential Conversation Baseline)
+    if baseline_name_or_path.lower() in ("auto", "self"):
+        _active_session = DriftSession.initialise_auto(
+            embedding_adapter=adapter,
+            warm_up_turns=2,
+            metric=metric,
+            use_trend=True,
+        )
+        _eval_interval = eval_every_n_turns
+        _turn_counter = 0
+        _batch_buffer = []
+        return f"Attached to dynamic session. Baseline: AUTO (capturing initial 2 turns of this conversation). Notice mode: '{_notice_mode}'."
+    
+    # Static Preset Baseline Path
     if os.path.exists(baseline_name_or_path):
         baseline_path = baseline_name_or_path
     else:
-        # Check standard baselines dir
         base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "baselines")
         candidate = os.path.join(base_dir, f"{baseline_name_or_path}.json" if not baseline_name_or_path.endswith(".json") else baseline_name_or_path)
         if os.path.exists(candidate):
@@ -72,14 +92,6 @@ def drift_attach_session(
 
     store = BaselineStore(baseline_path)
     examples = store.examples
-    
-    # Resolve embedding adapter with fallback
-    if provider == "hosted" and os.environ.get("GEMINI_API_KEY"):
-        adapter = GeminiEmbeddingAdapter(api_key=os.environ["GEMINI_API_KEY"])
-    elif provider == "local":
-        adapter = LocalEmbeddingAdapter()
-    else:
-        adapter = DeterministicEmbeddingAdapter()
         
     try:
         _active_session = DriftSession.initialise(

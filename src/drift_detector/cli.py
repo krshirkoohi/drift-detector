@@ -5,6 +5,7 @@ import urllib.request
 from typing import List, Dict, Any, Optional
 from .baseline import BaselineStore
 from .detector import DriftDetector
+from .session import DriftSession
 
 def generate_gemini_response(prompt: str, history: List[Dict[str, Any]], api_key: str) -> str:
     """Send chat request to Gemini API via urllib."""
@@ -98,18 +99,36 @@ def run_cli_agent(
             print("Using hosted Gemini embedding provider...")
             adapter = GeminiEmbeddingAdapter(api_key)
 
-        store = BaselineStore(baseline_file)
-        detector = DriftDetector(
-            baseline_store=store,
-            api_key=api_key,
-            threshold=threshold,
-            metric=metric,
-            log_dir=os.path.join(os.path.dirname(baseline_file), "..", "data"),
-            use_trend=use_trend,
-            embedding_adapter=adapter
-        )
-        print("✅ Baseline centroid calculated successfully.")
-        print(f"✅ Drift detector active (Metric: {metric}, Threshold: {detector.threshold:.4f}, Use Trend: {use_trend}).")
+        if baseline_file.lower() in ("auto", "self"):
+            session = DriftSession.initialise_auto(
+                embedding_adapter=adapter,
+                warm_up_turns=2,
+                metric=metric,
+                use_trend=use_trend,
+            )
+            detector = DriftDetector(
+                baseline_store=BaselineStore.__new__(BaselineStore),
+                api_key=api_key,
+                threshold=threshold,
+                metric=metric,
+                use_trend=use_trend,
+                embedding_adapter=adapter
+            )
+            detector.session = session
+            print("✅ Dynamic Auto-Baseline active (capturing initial 2 turns of this conversation as reference topic).")
+        else:
+            store = BaselineStore(baseline_file)
+            detector = DriftDetector(
+                baseline_store=store,
+                api_key=api_key,
+                threshold=threshold,
+                metric=metric,
+                log_dir=os.path.join(os.path.dirname(baseline_file), "..", "data"),
+                use_trend=use_trend,
+                embedding_adapter=adapter
+            )
+            print("✅ Baseline centroid calculated successfully.")
+        print(f"✅ Drift detector active (Metric: {metric}, Use Trend: {use_trend}).")
     except Exception as e:
         print(f"❌ Error during initialisation: {e}")
         sys.exit(1)
@@ -281,9 +300,9 @@ def _cli_entrypoint() -> None:
     )
     parser.add_argument(
         "--baseline",
-        default=None,
-        required=True,
-        help="Path to the baseline specification JSON file",
+        default="auto",
+        required=False,
+        help="Path to baseline JSON file or 'auto' for dynamic conversation baselining (default: auto)",
     )
     parser.add_argument(
         "--threshold",
