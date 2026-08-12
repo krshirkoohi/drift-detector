@@ -25,6 +25,8 @@ _turn_counter: int = 0
 _batch_buffer: List[Dict[str, Any]] = []
 
 
+_notice_mode: str = "simple"
+
 @mcp.prompt()
 def drift_session_init_guidance() -> str:
     """System prompt guidance for developers using drift-detector-mcp."""
@@ -42,6 +44,7 @@ def drift_attach_session(
     eval_every_n_turns: int = 1,
     metric: str = "cosine",
     provider: str = "hosted",
+    notice_mode: str = "simple",
 ) -> str:
     """Attach drift-detector to an active chat session and set evaluation baseline.
     
@@ -50,8 +53,10 @@ def drift_attach_session(
         eval_every_n_turns: Evaluate every N turns (default 1).
         metric: Distance metric ('cosine' or 'euclidean').
         provider: Embedding provider ('hosted', 'local', or 'deterministic').
+        notice_mode: Verbosity level for drift alerts ('simple' or 'advanced').
     """
-    global _active_session, _eval_interval, _turn_counter, _batch_buffer
+    global _active_session, _eval_interval, _turn_counter, _batch_buffer, _notice_mode
+    _notice_mode = notice_mode.lower()
     
     # Resolve baseline path
     if os.path.exists(baseline_name_or_path):
@@ -83,8 +88,7 @@ def drift_attach_session(
             metric=metric,
             use_trend=True,
         )
-    except Exception as err:
-        # Fallback to offline deterministic adapter if hosted fails
+    except Exception:
         adapter = DeterministicEmbeddingAdapter()
         _active_session = DriftSession.initialise(
             known_good_responses=examples,
@@ -97,41 +101,38 @@ def drift_attach_session(
     _turn_counter = 0
     _batch_buffer = []
     
-    return f"Attached to session. Baseline: '{store.name}' ({len(examples)} examples). Evaluation interval: every {_eval_interval} turn(s)."
+    return f"Attached to session. Baseline: '{store.name}' ({len(examples)} examples). Notice mode: '{_notice_mode}'."
 
 
 @mcp.tool()
-def drift_evaluate_turn(agent_response: str, user_prompt: str = "") -> str:
+def drift_evaluate_turn(agent_response: str, user_prompt: str = "", notice_mode: Optional[str] = None) -> str:
     """Evaluate an agent turn in background. Invisible on clean turns; returns warning popup on drift.
     
     Args:
         agent_response: Text of the assistant/agent response.
         user_prompt: Optional text of the user prompt.
+        notice_mode: Optional override verbosity mode ('simple' or 'advanced').
     """
-    global _active_session, _eval_interval, _turn_counter, _batch_buffer
+    global _active_session, _eval_interval, _turn_counter, _batch_buffer, _notice_mode
     
     if _active_session is None:
-        # Auto-initialize default session if not attached
         drift_attach_session()
         
+    mode = notice_mode.lower() if notice_mode else _notice_mode
     _turn_counter += 1
     _batch_buffer.append({"user": user_prompt, "agent": agent_response})
     
-    # Check if we should evaluate on this batch turn
     if _turn_counter % _eval_interval != 0:
         return json.dumps({"status": "buffering", "turn": _turn_counter, "eval_every": _eval_interval})
         
-    # Evaluate response with DriftSession
     try:
         verdict = _active_session.observe(agent_response)
     except Exception:
-        # Fallback adapter if embedding API fails
         _active_session.embedding_adapter = DeterministicEmbeddingAdapter()
         verdict = _active_session.observe(agent_response)
 
     is_drifting = (verdict.distance > verdict.threshold) or verdict.drift_detected
     
-    # If clean, stay invisible in background
     if not is_drifting:
         return json.dumps({
             "status": "clean",
@@ -141,14 +142,17 @@ def drift_evaluate_turn(agent_response: str, user_prompt: str = "") -> str:
             "drift_detected": False,
         })
         
-    # If drift detected, generate single-line status bar indicator (matching terminal IDE footers)
-    warning_status_bar = (
-        f"\n🔴 [driftd] ⚠ DRIFT DETECTED · turn {_turn_counter} · "
-        f"{verdict.metric.upper()} dist: {verdict.cosine_distance if verdict.metric == 'cosine' else verdict.euclidean_distance:.4f} "
-        f"(threshold: {verdict.threshold:.4f}) · Page-Hinkley Sk: {verdict.trend_statistic:.4f} · recommend context reset\n"
-    )
+    # Format according to notice mode (simple vs advanced)
+    if mode == "advanced":
+        warning_notice = (
+            f"\n🔴 [driftd] ⚠ DRIFT DETECTED · turn {_turn_counter} · "
+            f"{verdict.metric.upper()} dist: {verdict.cosine_distance if verdict.metric == 'cosine' else verdict.euclidean_distance:.4f} "
+            f"(threshold: {verdict.threshold:.4f}) · Page-Hinkley Sk: {verdict.trend_statistic:.4f} · recommend context reset\n"
+        )
+    else: # simple mode
+        warning_notice = "\n🔴 [driftd] ⚠ DRIFT DETECTED\n"
     
-    return warning_status_bar
+    return warning_notice
 
 
 @mcp.tool()

@@ -39,11 +39,14 @@ def generate_gemini_response(prompt: str, history: List[Dict[str, Any]], api_key
     except Exception as e:
         raise RuntimeError(f"Gemini API request failed: {e}")
 
-def _print_drift_notice(metrics: Dict[str, Any], use_trend: bool, detailed: bool) -> None:
+def _print_drift_notice(metrics: Dict[str, Any], use_trend: bool, notice_mode: str = "simple") -> None:
     """Print an inline status bar drift notice to stdout."""
-    dist_val = metrics["cosine_distance"] if metrics["metric"] == "cosine" else metrics["euclidean_distance"]
-    ph_str = f" · PH Sk: {metrics['ph_statistic']:.4f}" if use_trend and "ph_statistic" in metrics else ""
-    print(f"\n🔴 [driftd] ⚠ DRIFT DETECTED · {metrics['metric'].upper()} dist: {dist_val:.4f} (threshold: {metrics['threshold']:.4f}){ph_str} · recommend context reset\n")
+    if notice_mode == "advanced":
+        dist_val = metrics["cosine_distance"] if metrics["metric"] == "cosine" else metrics["euclidean_distance"]
+        ph_str = f" · PH Sk: {metrics['ph_statistic']:.4f}" if use_trend and "ph_statistic" in metrics else ""
+        print(f"\n🔴 [driftd] ⚠ DRIFT DETECTED · {metrics['metric'].upper()} dist: {dist_val:.4f} (threshold: {metrics['threshold']:.4f}){ph_str} · recommend context reset\n")
+    else:
+        print("\n🔴 [driftd] ⚠ DRIFT DETECTED\n")
 
 
 def generate_mock_response(history_len: int) -> str:
@@ -113,8 +116,9 @@ def run_cli_agent(
 
     history: List[Dict[str, Any]] = []
     detector_enabled: bool = True
+    notice_mode: str = "advanced" if detailed else "simple"
     print("\nSystem: You can now converse with the agent. Type 'exit' to quit.")
-    print("System: Type '/toggle' or '/drift' to turn background detection ON/OFF. Type '/status' for metrics.")
+    print("System: Type '/toggle' to turn detection ON/OFF. Type '/mode simple' or '/mode advanced' to adjust verbosity.")
     print("====================================================\n")
 
     while True:
@@ -142,10 +146,18 @@ def run_cli_agent(
             detector_enabled = False
             print("\n  [driftd] Drift detector monitoring is PAUSED ⏸️\n")
             continue
+        if prompt.lower() in ("/mode simple", "/simple"):
+            notice_mode = "simple"
+            print("\n  [driftd] Verbosity mode set to SIMPLE 🔹 (Status tag only)\n")
+            continue
+        if prompt.lower() in ("/mode advanced", "/advanced"):
+            notice_mode = "advanced"
+            print("\n  [driftd] Verbosity mode set to ADVANCED 🔸 (Full diagnostic metrics)\n")
+            continue
         if prompt.lower() in ("/status", "/metrics"):
             summary = detector.summary()
             state_str = "ENABLED ✅" if detector_enabled else "PAUSED ⏸️"
-            print(f"\n  [driftd status] Status: {state_str} | Observed Turns: {summary.get('turns', 0)} | Drifted: {summary.get('drifted_turns', 0)} | Topic Focus: {summary.get('topic_focus')}\n")
+            print(f"\n  [driftd status] Status: {state_str} | Mode: {notice_mode.upper()} | Observed Turns: {summary.get('turns', 0)} | Drifted: {summary.get('drifted_turns', 0)} | Topic Focus: {summary.get('topic_focus')}\n")
             continue
 
         print("Agent > Thinking...", end="\r")
@@ -162,8 +174,8 @@ def run_cli_agent(
                 metrics = detector.check_response(response)
                 # Inline drift notice
                 if metrics["is_drifting"]:
-                    _print_drift_notice(metrics, use_trend, detailed)
-                elif detailed:
+                    _print_drift_notice(metrics, use_trend, notice_mode=notice_mode)
+                elif notice_mode == "advanced":
                     d_val = metrics["cosine_distance"] if metrics["metric"] == "cosine" else metrics["euclidean_distance"]
                     print(f"  [driftd status] turn {detector.ph_n} | {metrics['metric']} dist: {d_val:.4f} | threshold: {metrics['threshold']:.4f} (healthy)")
                 
