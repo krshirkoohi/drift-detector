@@ -116,9 +116,10 @@ def drift_evaluate_turn(agent_response: str, user_prompt: str = "") -> str:
         
     # Evaluate response with DriftSession
     verdict = _active_session.observe(agent_response)
+    is_drifting = (verdict.distance > verdict.threshold) or verdict.drift_detected
     
     # If clean, stay invisible in background
-    if not verdict.drift_detected:
+    if not is_drifting:
         return json.dumps({
             "status": "clean",
             "turn": _turn_counter,
@@ -136,7 +137,7 @@ def drift_evaluate_turn(agent_response: str, user_prompt: str = "") -> str:
         f"│ Metric           : {verdict.metric.upper()}                              │\n"
         f"│ Distance         : {verdict.cosine_distance if verdict.metric == 'cosine' else verdict.euclidean_distance:.4f} (Threshold: {verdict.threshold:.4f})     │\n"
         f"│ Page-Hinkley Sk  : {verdict.trend_statistic:.4f}                          │\n"
-        f"│ Recommend Fresh  : {'Yes' if verdict.recommend_fresh_chat else 'No'}                                 │\n"
+        f"│ Recommend Fresh  : {'Yes' if is_drifting else 'No'}                                 │\n"
         "└──────────────────────────────────────────────────────────┘\n"
     )
     
