@@ -1,7 +1,7 @@
 """
 detector.py — Legacy compatibility wrapper for the drift detection engine.
 
-Provides DriftDetector and TurnScore, which delegate to the new DriftSession API under the hood.
+Provides DriftDetector and DriftResult, which delegate to the new DriftSession API under the hood.
 """
 from dataclasses import dataclass, asdict
 from typing import Dict, Any, Optional, List
@@ -12,7 +12,7 @@ from .embeddings import EmbeddingAdapter
 from .session import DriftSession
 
 @dataclass
-class TurnScore:
+class DriftResult:
     """Legacy container for a single turn's metrics."""
     turn: int
     cosine_distance: float
@@ -22,7 +22,7 @@ class TurnScore:
     drifted: bool
 
     def to_dict(self) -> dict:
-        """Convert the TurnScore to a dictionary."""
+        """Convert the DriftResult to a dictionary."""
         return asdict(self)
 
 
@@ -48,6 +48,8 @@ class DriftDetector:
         self.metric = metric.lower()
         self.log_dir = log_dir
         self.use_trend = use_trend
+        self.ph_sustain = ph_sustain
+        self.ph_burn_in = ph_burn_in
         
         # Initialise adapter
         if embedding_adapter is None:
@@ -72,14 +74,60 @@ class DriftDetector:
             use_trend=self.use_trend,
             ph_sustain=ph_sustain,
             ph_burn_in=ph_burn_in,
-            log_dir=self.log_dir
+            log_dir=self.log_dir,
+            embeddings=self.baseline_store.embeddings,
+            centroid=self.baseline_store.centroid
         )
         
         # Sync attributes for backwards compatibility
         self.threshold = self._session.threshold
         self.ph_delta = self._session.ph_delta
         self.ph_threshold = self._session.ph_threshold
+
+    def reset(self) -> None:
+        """Reset the detector state for a new session."""
+        self._session = DriftSession.initialise(
+            known_good_responses=self.baseline_store.examples,
+            embedding_adapter=self.embedding_adapter,
+            name=self.baseline_store.name,
+            metric=self.metric,
+            threshold=self.threshold,
+            use_trend=self.use_trend,
+            ph_sustain=self.ph_sustain,
+            ph_burn_in=self.ph_burn_in,
+            log_dir=self.log_dir,
+            embeddings=self.baseline_store.embeddings,
+            centroid=self.baseline_store.centroid
+        )
         
+    @classmethod
+    def from_examples(
+        cls,
+        examples: List[str],
+        name: str = "default",
+        api_key: Optional[str] = None,
+        threshold: Optional[float] = None,
+        metric: str = "cosine",
+        log_dir: Optional[str] = None,
+        use_trend: bool = False,
+        embedding_adapter: Optional[EmbeddingAdapter] = None,
+        ph_sustain: int = 1,
+        ph_burn_in: int = 0
+    ) -> "DriftDetector":
+        """Create a DriftDetector dynamically from a list of examples."""
+        baseline_store = BaselineStore.from_examples(examples, name=name)
+        return cls(
+            baseline_store=baseline_store,
+            api_key=api_key,
+            threshold=threshold,
+            metric=metric,
+            log_dir=log_dir,
+            use_trend=use_trend,
+            embedding_adapter=embedding_adapter,
+            ph_sustain=ph_sustain,
+            ph_burn_in=ph_burn_in
+        )
+
     @property
     def has_drifted(self) -> bool:
         """Return whether drift has been detected in this session."""
@@ -122,12 +170,12 @@ class DriftDetector:
         self._session.ph_min_sum = value
         
     @property
-    def history(self) -> List[TurnScore]:
-        """Convert new session history back to legacy TurnScore list for compatibility."""
+    def history(self) -> List[DriftResult]:
+        """Convert new session history back to legacy DriftResult list for compatibility."""
         legacy_history = []
         for v in self._session.history:
             threshold_breach = v.distance > v.threshold
-            legacy_history.append(TurnScore(
+            legacy_history.append(DriftResult(
                 turn=v.turn_index,
                 cosine_distance=v.cosine_distance,
                 euclidean_distance=v.euclidean_distance,
@@ -165,11 +213,11 @@ class DriftDetector:
             
         return result
 
-    def score(self, text: str) -> TurnScore:
-        """Score a response text, returning a TurnScore (legacy API)."""
+    def score(self, text: str) -> DriftResult:
+        """Score a response text, returning a DriftResult (legacy API)."""
         v = self._session.observe(text)
         threshold_breach = v.distance > v.threshold
-        return TurnScore(
+        return DriftResult(
             turn=v.turn_index,
             cosine_distance=v.cosine_distance,
             euclidean_distance=v.euclidean_distance,

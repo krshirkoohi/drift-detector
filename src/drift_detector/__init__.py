@@ -3,7 +3,7 @@ Drift Detector MVP package.
 """
 
 from .baseline import BaselineStore
-from .detector import DriftDetector, TurnScore
+from .detector import DriftDetector, DriftResult
 from .embeddings import (
     EmbeddingAdapter,
     GeminiEmbeddingAdapter,
@@ -20,7 +20,7 @@ from .storage import BaselineStorage, SessionLogger
 __all__ = [
     "BaselineStore",
     "DriftDetector",
-    "TurnScore",
+    "DriftResult",
     "EmbeddingAdapter",
     "GeminiEmbeddingAdapter",
     "LocalEmbeddingAdapter",

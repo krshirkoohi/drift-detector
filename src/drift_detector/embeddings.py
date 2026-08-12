@@ -3,6 +3,8 @@ import json
 import urllib.request
 from typing import List, Optional
 
+from .utils import STOPWORDS
+
 class EmbeddingAdapter(abc.ABC):
     """
     Abstract base class defining the pluggable interface for all embedding models.
@@ -119,10 +121,7 @@ class LocalEmbeddingAdapter(EmbeddingAdapter):
             return embeddings[0].tolist()
 
 
-_STOPWORDS = frozenset(
-    "a an and are as at be but by for from had has have he her his i if in into is it its of on or "
-    "our she so that the their them they this to was we were while will with you your".split()
-)
+
 
 
 class DeterministicEmbeddingAdapter(EmbeddingAdapter):
@@ -146,7 +145,7 @@ class DeterministicEmbeddingAdapter(EmbeddingAdapter):
         import numpy as np
         out = np.zeros(self.dim)
         for t in re.findall(r"[a-z0-9']+", text.lower()):
-            if t not in _STOPWORDS:
+            if t not in STOPWORDS:
                 out += self._token_vec(t)
         norm = np.linalg.norm(out)
         if norm == 0:

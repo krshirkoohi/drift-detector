@@ -149,11 +149,9 @@ class AgentHarness:
         self._turn_index = 0
         self._turns = []
 
-        # Reset Page-Hinkley state inside the detector for a fresh session
-        self.detector.ph_n = 0
-        self.detector.ph_running_mean = 0.0
-        self.detector.ph_running_sum = 0.0
-        self.detector.ph_min_sum = 0.0
+        # Reset the detector state for a fresh session
+        if hasattr(self.detector, 'reset'):
+            self.detector.reset()
 
         if self.verbose:
             _banner(f"SESSION STARTED  ·  {self._session_id}")
@@ -221,11 +219,9 @@ class AgentHarness:
                 print(f"  Summary saved  : {summary_path}")
             print()
 
-        # Reset Page-Hinkley state on the detector so it is clean for the next session
-        self.detector.ph_n = 0
-        self.detector.ph_running_mean = 0.0
-        self.detector.ph_running_sum = 0.0
-        self.detector.ph_min_sum = 0.0
+        # Reset the detector state so it is clean for the next session
+        if hasattr(self.detector, 'reset'):
+            self.detector.reset()
 
         # Clear session state
         self._session_id = None

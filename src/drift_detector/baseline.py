@@ -6,6 +6,8 @@ Delegates baseline serialisation to the new BaselineStorage class.
 from typing import List, Optional
 import numpy as np
 
+from .utils import calculate_distances, STOPWORDS
+
 from .embeddings import EmbeddingAdapter
 from .storage import BaselineStorage
 
@@ -75,21 +77,7 @@ class BaselineStore:
         if self.embeddings is None or self.centroid is None:
             raise RuntimeError("Baseline centroid and embeddings must be computed first.")
             
-        metric = metric.lower()
-        if metric == "cosine":
-            norms = np.linalg.norm(self.embeddings, axis=1)
-            norm_c = np.linalg.norm(self.centroid)
-            if norm_c == 0:
-                dists = np.ones(len(self.embeddings))
-            else:
-                # Avoid division by zero by replacing zero norms with 1
-                norms = np.where(norms == 0, 1.0, norms)
-                dots = np.dot(self.embeddings, self.centroid)
-                dists = 1.0 - dots / (norms * norm_c)
-        elif metric == "euclidean":
-            dists = np.linalg.norm(self.embeddings - self.centroid, axis=1)
-        else:
-            raise ValueError("metric must be either 'cosine' or 'euclidean'")
+        dists = calculate_distances(self.embeddings, self.centroid, metric)
             
         return float(np.percentile(dists, percentile))
 
@@ -98,14 +86,11 @@ class BaselineStore:
         import re
         from collections import Counter
         
-        stopwords = {
-            "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have", "he", "her", "his", "i", "if", "in", "into", "is", "it", "its", "of", "on", "or", "our", "she", "so", "that", "the", "their", "them", "they", "this", "to", "was", "we", "were", "while", "will", "with", "you", "your"
-        }
         
         words = []
         for text in self.examples:
             for word in re.findall(r"[a-z0-9']+", text.lower()):
-                if word not in stopwords and len(word) >= 3:
+                if word not in STOPWORDS and len(word) >= 3:
                     words.append(word)
         
         if not words:

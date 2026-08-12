@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 
 from .embeddings import EmbeddingAdapter
+from .utils import calculate_distances, cosine_distance, euclidean_distance, STOPWORDS
 from .models import DriftVerdict
 from .storage import SessionLogger
 
@@ -71,6 +72,8 @@ class DriftSession:
         ph_sustain: int = 1,
         ph_burn_in: int = 0,
         log_dir: Optional[str] = None,
+        embeddings: Optional[np.ndarray] = None,
+        centroid: Optional[np.ndarray] = None,
     ) -> "DriftSession":
         """
         Initialise a new DriftSession with a baseline and embedding provider.
@@ -88,6 +91,8 @@ class DriftSession:
             ph_sustain: Number of consecutive breaches before triggering trend alarm.
             ph_burn_in: Number of turns to ignore at session start.
             log_dir: Optional directory to save session metrics.
+            embeddings: Optional precomputed embeddings to skip API calls.
+            centroid: Optional precomputed centroid.
             
         Returns:
             A fully calibrated DriftSession instance.
@@ -100,30 +105,21 @@ class DriftSession:
             raise ValueError("metric must be either 'cosine' or 'euclidean'")
             
         # 1. Fetch baseline embeddings
-        embeddings_list = []
-        for example in known_good_responses:
-            emb = embedding_adapter.embed(example)
-            if emb:
-                embeddings_list.append(emb)
+        if embeddings is None or centroid is None:
+            embeddings_list = []
+            for example in known_good_responses:
+                emb = embedding_adapter.embed(example)
+                if emb:
+                    embeddings_list.append(emb)
+                    
+            if not embeddings_list:
+                raise RuntimeError("Failed to generate embeddings for baseline responses.")
                 
-        if not embeddings_list:
-            raise RuntimeError("Failed to generate embeddings for baseline responses.")
-            
-        embeddings = np.array(embeddings_list)
-        centroid = embeddings.mean(axis=0)
+            embeddings = np.array(embeddings_list)
+            centroid = embeddings.mean(axis=0)
         
         # 2. Calibrate threshold
-        if metric == "cosine":
-            norms = np.linalg.norm(embeddings, axis=1)
-            norm_c = np.linalg.norm(centroid)
-            if norm_c == 0:
-                dists = np.ones(len(embeddings))
-            else:
-                norms = np.where(norms == 0, 1.0, norms)
-                dots = np.dot(embeddings, centroid)
-                dists = 1.0 - dots / (norms * norm_c)
-        else: # euclidean
-            dists = np.linalg.norm(embeddings - centroid, axis=1)
+        dists = calculate_distances(embeddings, centroid, metric)
             
         calibrated_threshold = threshold
         if calibrated_threshold is None:
@@ -172,17 +168,8 @@ class DriftSession:
         response_emb = np.array(response_emb_list)
         
         # 2. Compute similarity & distance
-        norm_r = np.linalg.norm(response_emb)
-        norm_c = np.linalg.norm(self.centroid)
-        
-        if norm_r == 0 or norm_c == 0:
-            cos_dist = 1.0
-        else:
-            dots = np.dot(response_emb, self.centroid)
-            cos_dist = float(1.0 - dots / (norm_r * norm_c))
-            
-        euc_dist = float(np.linalg.norm(response_emb - self.centroid))
-        
+        cos_dist = cosine_distance(response_emb, self.centroid)
+        euc_dist = euclidean_distance(response_emb, self.centroid)
         current_distance = cos_dist if self.metric == "cosine" else euc_dist
         
         # 3. Update Page-Hinkley streaming state
@@ -248,14 +235,11 @@ class DriftSession:
         import re
         from collections import Counter
         
-        stopwords = {
-            "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have", "he", "her", "his", "i", "if", "in", "into", "is", "it", "its", "of", "on", "or", "our", "she", "so", "that", "the", "their", "them", "they", "this", "to", "was", "we", "were", "while", "will", "with", "you", "your"
-        }
         
         words = []
         for text in self.examples:
             for word in re.findall(r"[a-z0-9']+", text.lower()):
-                if word not in stopwords and len(word) >= 3:
+                if word not in STOPWORDS and len(word) >= 3:
                     words.append(word)
                     
         if not words:
