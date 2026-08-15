@@ -1,19 +1,50 @@
-"""
-detector.py — Legacy compatibility wrapper for the drift detection engine.
+"""Drift detection engine: per-turn distance scoring gated behind a sustained-trend rule."""
+from __future__ import annotations
 
-Provides DriftDetector and DriftResult, which delegate to the new DriftSession API under the hood.
-"""
-from dataclasses import dataclass, asdict
-from typing import Dict, Any, Optional, List
+from dataclasses import asdict, dataclass
+
 import numpy as np
 
-from .baseline import BaselineStore
-from .embeddings import EmbeddingAdapter
-from .session import DriftSession
+from .baseline import Baseline
+from .embedding import EmbeddingProvider, l2_normalise
+
+
+class PageHinkley:
+    """Streaming change detector: alarms on sustained upward shift, forgives blips.
+
+    Drift is a divergence, not a blip (V1 design decision): the alarm only fires
+    when the PH statistic exceeds lambda AND the current value sits above the
+    running mean for `sustain` consecutive turns. A one-turn spike that recovers
+    resets the streak and is forgiven.
+    """
+
+    def __init__(self, delta: float = 0.005, lam: float = 0.1, burn_in: int = 3, sustain: int = 2):
+        self.delta, self.lam, self.burn_in, self.sustain = delta, lam, burn_in, sustain
+        self.reset()
+
+    def reset(self) -> None:
+        self.n = 0
+        self.mean = 0.0
+        self.cum = 0.0
+        self.cum_min = 0.0
+        self.exceed_streak = 0
+
+    def update(self, x: float) -> bool:
+        self.n += 1
+        self.mean += (x - self.mean) / self.n
+        self.cum += x - self.mean - self.delta
+        self.cum_min = min(self.cum_min, self.cum)
+        elevated = self.statistic > self.lam and x > self.mean
+        self.exceed_streak = self.exceed_streak + 1 if elevated else 0
+        return self.n > self.burn_in and self.exceed_streak >= self.sustain
+
+    @property
+    def statistic(self) -> float:
+        return self.cum - self.cum_min
+
 
 @dataclass
-class DriftResult:
-    """Legacy container for a single turn's metrics."""
+class TurnScore:
     turn: int
     cosine_distance: float
     euclidean_distance: float
@@ -21,227 +52,72 @@ class DriftResult:
     trend_alarm: bool
     drifted: bool
 
+    @property
+    def badge(self) -> str:
+        if self.drifted:
+            return "drift detected"
+        if self.threshold_breach:
+            return "threshold breach"
+        return "nominal"
+
     def to_dict(self) -> dict:
-        """Convert the DriftResult to a dictionary."""
-        return asdict(self)
+        d = asdict(self)
+        d["badge"] = self.badge
+        return d
 
 
 class DriftDetector:
+    """Scores each response against the baseline centroid.
+
+    - Embeds the response only (the PRD thesis: output quality is the signal).
+    - L2-normalises, then computes cosine and Euclidean distance to the centroid.
+    - Static threshold breach is reported per turn; the drift verdict is gated
+      behind the Page-Hinkley sustained-trend rule so one-turn blips are forgiven.
     """
-    Legacy wrapper that provides backward compatibility for DriftDetector.
-    
-    Delegates all operations to the new DriftSession class.
-    """
+
     def __init__(
         self,
-        baseline_store: BaselineStore,
-        api_key: Optional[str] = None,
-        threshold: Optional[float] = None,
+        baseline: Baseline,
+        provider: EmbeddingProvider,
         metric: str = "cosine",
-        log_dir: Optional[str] = None,
-        use_trend: bool = False,
-        embedding_adapter: Optional[EmbeddingAdapter] = None,
-        ph_sustain: int = 1,
-        ph_burn_in: int = 0
+        use_trend: bool = True,
+        ph_delta: float = 0.005,
+        ph_lambda: float = 0.1,
     ):
-        self.baseline_store = baseline_store
-        self.metric = metric.lower()
-        self.log_dir = log_dir
+        self.baseline = baseline
+        self.provider = provider
+        self.metric = metric
         self.use_trend = use_trend
-        self.ph_sustain = ph_sustain
-        self.ph_burn_in = ph_burn_in
-        
-        # Initialise adapter
-        if embedding_adapter is None:
-            if not api_key:
-                raise ValueError("Either api_key or embedding_adapter must be provided.")
-            from .embeddings import GeminiEmbeddingAdapter
-            self.embedding_adapter = GeminiEmbeddingAdapter(api_key)
+        self.ph = PageHinkley(delta=ph_delta, lam=ph_lambda)
+        self.turn = 0
+        self.history: list[TurnScore] = []
+
+    def score(self, text: str) -> TurnScore:
+        self.turn += 1
+        v = l2_normalise(self.provider.embed([text]))[0]
+        cos = float(1.0 - v @ self.baseline.centroid)
+        euc = float(np.linalg.norm(v - self.baseline.centroid))
+        if self.metric == "cosine":
+            d, thr = cos, self.baseline.cosine_threshold
         else:
-            self.embedding_adapter = embedding_adapter
-
-        if baseline_store is None or not getattr(baseline_store, "centroid", None) and not getattr(baseline_store, "examples", None):
-            self._session = DriftSession.initialise_auto(
-                embedding_adapter=self.embedding_adapter,
-                warm_up_turns=2,
-                metric=self.metric,
-                threshold=threshold,
-                use_trend=self.use_trend,
-                ph_sustain=ph_sustain,
-                ph_burn_in=ph_burn_in,
-                log_dir=self.log_dir,
-            )
-        else:
-            if self.baseline_store.centroid is None:
-                self.baseline_store.compute_centroid(adapter=self.embedding_adapter)
-                
-            self._session = DriftSession.initialise(
-                known_good_responses=self.baseline_store.examples,
-                embedding_adapter=self.embedding_adapter,
-                name=self.baseline_store.name,
-                metric=self.metric,
-                threshold=threshold,
-                use_trend=self.use_trend,
-                ph_sustain=ph_sustain,
-                ph_burn_in=ph_burn_in,
-                log_dir=self.log_dir,
-                embeddings=self.baseline_store.embeddings,
-                centroid=self.baseline_store.centroid
-            )
-        
-        # Sync attributes for backwards compatibility
-        self.threshold = self._session.threshold
-        self.ph_delta = self._session.ph_delta
-        self.ph_threshold = self._session.ph_threshold
-
-    def reset(self) -> None:
-        """Reset the detector state for a new session."""
-        self._session = DriftSession.initialise(
-            known_good_responses=self.baseline_store.examples,
-            embedding_adapter=self.embedding_adapter,
-            name=self.baseline_store.name,
-            metric=self.metric,
-            threshold=self.threshold,
-            use_trend=self.use_trend,
-            ph_sustain=self.ph_sustain,
-            ph_burn_in=self.ph_burn_in,
-            log_dir=self.log_dir,
-            embeddings=self.baseline_store.embeddings,
-            centroid=self.baseline_store.centroid
-        )
-        
-    @classmethod
-    def from_examples(
-        cls,
-        examples: List[str],
-        name: str = "default",
-        api_key: Optional[str] = None,
-        threshold: Optional[float] = None,
-        metric: str = "cosine",
-        log_dir: Optional[str] = None,
-        use_trend: bool = False,
-        embedding_adapter: Optional[EmbeddingAdapter] = None,
-        ph_sustain: int = 1,
-        ph_burn_in: int = 0
-    ) -> "DriftDetector":
-        """Create a DriftDetector dynamically from a list of examples."""
-        baseline_store = BaselineStore.from_examples(examples, name=name)
-        return cls(
-            baseline_store=baseline_store,
-            api_key=api_key,
-            threshold=threshold,
-            metric=metric,
-            log_dir=log_dir,
-            use_trend=use_trend,
-            embedding_adapter=embedding_adapter,
-            ph_sustain=ph_sustain,
-            ph_burn_in=ph_burn_in
-        )
-
-    @property
-    def has_drifted(self) -> bool:
-        """Return whether drift has been detected in this session."""
-        return self._session.has_drifted
-        
-    @property
-    def ph_n(self) -> int:
-        """Get the current turn index (Page-Hinkley n)."""
-        return self._session.ph_n
-        
-    @ph_n.setter
-    def ph_n(self, value: int) -> None:
-        self._session.ph_n = value
-
-    @property
-    def ph_running_mean(self) -> float:
-        """Get Page-Hinkley running mean distance."""
-        return self._session.ph_running_mean
-        
-    @ph_running_mean.setter
-    def ph_running_mean(self, value: float) -> None:
-        self._session.ph_running_mean = value
-
-    @property
-    def ph_running_sum(self) -> float:
-        """Get Page-Hinkley running sum."""
-        return self._session.ph_running_sum
-        
-    @ph_running_sum.setter
-    def ph_running_sum(self, value: float) -> None:
-        self._session.ph_running_sum = value
-
-    @property
-    def ph_min_sum(self) -> float:
-        """Get Page-Hinkley running minimum sum."""
-        return self._session.ph_min_sum
-        
-    @ph_min_sum.setter
-    def ph_min_sum(self, value: float) -> None:
-        self._session.ph_min_sum = value
-        
-    @property
-    def history(self) -> List[DriftResult]:
-        """Convert new session history back to legacy DriftResult list for compatibility."""
-        legacy_history = []
-        for v in self._session.history:
-            threshold_breach = v.distance > v.threshold
-            legacy_history.append(DriftResult(
-                turn=v.turn_index,
-                cosine_distance=v.cosine_distance,
-                euclidean_distance=v.euclidean_distance,
-                threshold_breach=threshold_breach,
-                trend_alarm=v.trend_alarm if v.trend_alarm is not None else False,
-                drifted=v.drift_detected
-            ))
-        return legacy_history
-
-    def check_response(self, response_text: str) -> Dict[str, Any]:
-        """Analyse a single response against the baseline (legacy API)."""
-        v = self._session.observe(response_text)
-        
-        result = {
-            "timestamp": time_format_now(),
-            "response_snippet": response_text[:100] + ("..." if len(response_text) > 100 else ""),
-            "metric": self.metric,
-            "cosine_distance": v.cosine_distance,
-            "euclidean_distance": v.euclidean_distance,
-            "threshold": v.threshold,
-            "is_drifting": v.drift_detected,
-            "latency_ms": v.latency_ms
-        }
-        
-        if self.use_trend:
-            result.update({
-                "ph_running_mean": v.ph_running_mean,
-                "ph_running_sum": v.ph_running_sum,
-                "ph_min_sum": v.ph_min_sum,
-                "ph_statistic": v.trend_statistic,
-                "ph_threshold": v.ph_threshold,
-                "ph_delta": v.ph_delta,
-                "trend_alarm": v.trend_alarm
-            })
-            
-        return result
-
-    def score(self, text: str) -> DriftResult:
-        """Score a response text, returning a DriftResult (legacy API)."""
-        v = self._session.observe(text)
-        threshold_breach = v.distance > v.threshold
-        return DriftResult(
-            turn=v.turn_index,
-            cosine_distance=v.cosine_distance,
-            euclidean_distance=v.euclidean_distance,
-            threshold_breach=threshold_breach,
-            trend_alarm=v.trend_alarm if v.trend_alarm is not None else False,
-            drifted=v.drift_detected
-        )
+            d, thr = euc, self.baseline.euclidean_threshold
+        breach = d > thr
+        alarm = self.ph.update(d) if self.use_trend else False
+        drifted = alarm if self.use_trend else breach
+        ts = TurnScore(self.turn, round(cos, 4), round(euc, 4), breach, alarm, drifted)
+        self.history.append(ts)
+        return ts
 
     def summary(self) -> dict:
-        """Return summary statistics of the session history (legacy API)."""
-        return self._session.summary()
-
-
-def time_format_now() -> str:
-    """Helper to return current time formatted as UTC ISO-8601 string."""
-    import time
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        key = "cosine_distance" if self.metric == "cosine" else "euclidean_distance"
+        ds = [getattr(t, key) for t in self.history]
+        drifted = [t for t in self.history if t.drifted]
+        return {
+            "turns": len(self.history),
+            "drifted_turns": len(drifted),
+            "drift_rate": round(len(drifted) / len(self.history), 3) if self.history else 0.0,
+            "mean_distance": round(float(np.mean(ds)), 4) if ds else 0.0,
+            "peak_distance": round(float(np.max(ds)), 4) if ds else 0.0,
+            "metric": self.metric,
+            "trend_rule": self.use_trend,
+        }

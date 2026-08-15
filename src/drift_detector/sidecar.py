@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .baseline import BaselineStore
 from .detector import DriftDetector
-from .embeddings import get_adapter
+from .embedding import get_provider
 
 SESSIONS: dict[str, DriftDetector] = {}
 PROVIDER = None  # set in main()
@@ -61,8 +61,8 @@ class Handler(BaseHTTPRequestHandler):
                 "summary": det.summary(),
                 "history": [t.to_dict() for t in det.history],
                 "thresholds": {
-                    "cosine": det.baseline_store.calculate_percentile_threshold("cosine", 95.0),
-                    "euclidean": det.baseline_store.calculate_percentile_threshold("euclidean", 95.0),
+                    "cosine": det.baseline.cosine_threshold,
+                    "euclidean": det.baseline.euclidean_threshold,
                 },
             })
         self._send(404, {"error": "not found"})
@@ -76,21 +76,20 @@ class Handler(BaseHTTPRequestHandler):
             texts = data.get("baseline", [])
             if len(texts) < 3:
                 return self._send(400, {"error": "baseline needs at least 3 samples"})
-            baseline_store = BaselineStore.from_examples(texts)
+            baseline = BaselineStore(PROVIDER).build(texts)
             det = DriftDetector(
-                baseline_store=baseline_store,
+                baseline,
+                PROVIDER,
                 metric=data.get("metric", "cosine"),
                 use_trend=bool(data.get("use_trend", True)),
-                embedding_adapter=PROVIDER,
             )
             sid = uuid.uuid4().hex[:12]
             SESSIONS[sid] = det
             return self._send(201, {
                 "session_id": sid,
-                "n_samples": len(texts),
-                "topic_focus": baseline_store.get_topic_focus(),
-                "cosine_threshold": round(baseline_store.calculate_percentile_threshold("cosine", 95.0), 4),
-                "euclidean_threshold": round(baseline_store.calculate_percentile_threshold("euclidean", 95.0), 4),
+                "n_samples": baseline.n_samples,
+                "cosine_threshold": round(baseline.cosine_threshold, 4),
+                "euclidean_threshold": round(baseline.euclidean_threshold, 4),
             })
         m = re.fullmatch(r"/sessions/([\w-]+)/turns", self.path)
         if m:
@@ -114,7 +113,7 @@ def main() -> None:
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--provider", default="local", help="local | gemini | openai")
     args = p.parse_args()
-    PROVIDER = get_adapter(args.provider)
+    PROVIDER = get_provider(args.provider)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"driftd sidecar listening on {args.host}:{args.port} (provider={args.provider})")
     server.serve_forever()

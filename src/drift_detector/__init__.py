@@ -1,37 +1,27 @@
-"""
-Drift Detector MVP package.
-"""
-
-from .baseline import BaselineStore
-from .detector import DriftDetector, DriftResult
-from .embeddings import (
-    EmbeddingAdapter,
-    GeminiEmbeddingAdapter,
-    LocalEmbeddingAdapter,
-    DeterministicEmbeddingAdapter,
-    OpenAICompatibleEmbeddingAdapter,
-    get_adapter,
+"""drift_detector: semantic drift detection for LLM agent sessions."""
+from .baseline import Baseline, BaselineStore
+from .detector import DriftDetector, PageHinkley, TurnScore
+from .embedding import (
+    DeterministicProvider,
+    EmbeddingProvider,
+    GeminiProvider,
+    OpenAICompatibleProvider,
+    get_provider,
+    l2_normalise,
 )
-from .harness import AgentHarness, TurnRecord, SessionSummary
-from .models import DriftVerdict
-from .session import DriftSession
-from .storage import BaselineStorage, SessionLogger
+
+__version__ = "0.2.0"
 
 __all__ = [
+    "Baseline",
     "BaselineStore",
     "DriftDetector",
-    "DriftResult",
-    "EmbeddingAdapter",
-    "GeminiEmbeddingAdapter",
-    "LocalEmbeddingAdapter",
-    "DeterministicEmbeddingAdapter",
-    "OpenAICompatibleEmbeddingAdapter",
-    "get_adapter",
-    "AgentHarness",
-    "TurnRecord",
-    "SessionSummary",
-    "DriftVerdict",
-    "DriftSession",
-    "BaselineStorage",
-    "SessionLogger",
+    "PageHinkley",
+    "TurnScore",
+    "DeterministicProvider",
+    "EmbeddingProvider",
+    "GeminiProvider",
+    "OpenAICompatibleProvider",
+    "get_provider",
+    "l2_normalise",
 ]

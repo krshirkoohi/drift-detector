@@ -39,4 +39,5 @@ share/python-wheels/
 # Project specific
 data/
 .DS_Store
+.pytest_cache/
 

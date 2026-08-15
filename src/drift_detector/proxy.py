@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .baseline import BaselineStore
 from .detector import DriftDetector
-from .embeddings import get_adapter
+from .embedding import get_provider
 
 CONFIG = {
     "upstream": "http://127.0.0.1:9100",
@@ -58,12 +58,8 @@ def _score_turn(sid: str, text: str) -> dict:
     if state["detector"] is None:
         if len(state["responses"]) < n:
             return {"phase": "collecting-baseline", "collected": len(state["responses"]), "needed": n}
-        baseline_store = BaselineStore.from_examples(state["responses"][:n])
-        state["detector"] = DriftDetector(
-            baseline_store=baseline_store,
-            embedding_adapter=PROVIDER,
-            use_trend=True,
-        )
+        baseline = BaselineStore(PROVIDER).build(state["responses"][:n])
+        state["detector"] = DriftDetector(baseline, PROVIDER)
         return {"phase": "baseline-ready", "collected": n, "needed": n}
     score = state["detector"].score(text)
     return {"phase": "scoring", **score.to_dict()}
@@ -150,10 +146,10 @@ def main() -> None:
     p.add_argument("--baseline-n", type=int, default=5)
     p.add_argument("--inline-warnings", action="store_true")
     args = p.parse_args()
-    PROVIDER = get_adapter(args.provider)
+    PROVIDER = get_provider(args.provider)
     CONFIG.update(upstream=args.upstream, baseline_n=args.baseline_n, inline_warnings=args.inline_warnings)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"driftd proxy on {args.host}:{args.port} -> {CONFIG['upstream']}")
+    print(f"driftd proxy on {args.host}:{args.port} -> {args.upstream}")
     server.serve_forever()
 
 

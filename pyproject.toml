@@ -33,7 +33,7 @@ dev = [
 ]
 
 [project.scripts]
-driftd = "drift_detector.cli:_cli_entrypoint"
+driftd = "drift_detector.cli:main"
 drift-detector-mcp = "drift_detector.mcp_server:main"
 
 [tool.setuptools.packages.find]

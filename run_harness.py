@@ -30,9 +30,10 @@ from typing import Any, Dict, List
 # Ensure the src directory is on the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from drift_detector.baseline import BaselineStore
-from drift_detector.detector import DriftDetector
-from drift_detector.harness import AgentHarness
+import uuid
+import time
+from drift_detector.core import DriftDetector
+from drift_detector.embedding import get_provider
 
 
 # ---------------------------------------------------------------------------
@@ -144,38 +145,34 @@ def main() -> None:
     # ------------------------------------------------------------------
     print("⚙  Initialising drift detector harness...")
     try:
-        from drift_detector.embeddings import GeminiEmbeddingAdapter, LocalEmbeddingAdapter
+        from drift_detector.core import DriftDetector
+        from drift_detector.embedding import get_provider
 
-        if args.provider == "local":
-            print(f"   Embedding provider : local ({args.local_model})")
-            adapter = LocalEmbeddingAdapter(args.local_model)
-        else:
-            print("   Embedding provider : hosted (Gemini API)")
-            adapter = GeminiEmbeddingAdapter(api_key)
+        print(f"   Embedding provider : {args.provider}")
+        provider_kwargs = {"api_key": api_key} if args.provider == "hosted" else {"dim": 256} if args.provider == "local" else {}
+        provider_name = "gemini" if args.provider == "hosted" else "local"
+        adapter = get_provider(provider_name, **provider_kwargs)
 
-        store = BaselineStore(args.baseline)
-        detector = DriftDetector(
-            baseline_store=store,
-            api_key=api_key,
+        import json
+        with open(args.baseline, "r") as f:
+            data = json.load(f)
+            baseline_texts = [s["text"] if isinstance(s, dict) else s for s in data.get("samples", [])]
+
+        detector = DriftDetector.from_examples(
+            baseline_texts=baseline_texts,
+            provider=adapter,
             threshold=args.threshold,
             metric=args.metric,
-            log_dir=None,          # Harness handles its own logging
-            use_trend=args.use_trend,
-            embedding_adapter=adapter,
+            use_trend=args.use_trend
         )
-        print(f"   Baseline           : {store.name}")
-        print(f"   Metric / Threshold : {args.metric.upper()} / {detector.threshold:.4f}")
+        print(f"   Baseline           : {args.baseline}")
+        print(f"   Metric / Threshold : {args.metric.upper()} / {args.threshold or 'Auto'}")
         print(f"   Trend detection    : {'ON (Page-Hinkley)' if args.use_trend else 'OFF'}")
     except Exception as exc:
         print(f"❌  Initialisation failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    harness = AgentHarness(
-        detector=detector,
-        log_dir=args.log_dir,
-        verbose=not args.quiet,
-        detailed=args.detailed,
-    )
+    session_id = args.session_id or str(uuid.uuid4())
 
     # ------------------------------------------------------------------
     # Start session and run the conversation loop
@@ -207,10 +204,11 @@ def main() -> None:
         print("                         ", end="\r")
 
         # Feed the response through the harness (this is the core data-flow step)
-        harness.process_turn(user_prompt=prompt, agent_response=response)
+        score = detector.score(response)
 
         # Display the agent's response to the user
         print(f"Agent > {response}\n")
+        print(f"   [{score.badge}] cos={score.cosine_distance:.4f} | euc={score.euclidean_distance:.4f}")
 
         # Maintain conversation history for multi-turn context
         history.append({"role": "user", "text": prompt})
@@ -219,8 +217,8 @@ def main() -> None:
     # ------------------------------------------------------------------
     # End session and print summary
     # ------------------------------------------------------------------
-    harness.end_session()
-    print(f"\nLogs written to: {args.log_dir}/{session_id}*.jsonl\n")
+    summary = detector.summary()
+    print(f"\nSession Summary: {json.dumps(summary, indent=2)}")
 
 
 if __name__ == "__main__":

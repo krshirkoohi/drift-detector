@@ -4,397 +4,936 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drift-Detector · Interactive Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --text:#2C2C2B; --text2:#7D7A75; --canvas:#FFFFFF; --soft:#F9F8F7; --soft2:#F0EFED;
-  --border:#E6E5E3; --blue:#2783DE; --blue-soft:#E5F2FC; --green:#46A171; --green-soft:#E8F1EC;
-  --orange:#D5803B; --orange-soft:#FBEBDE; --red:#E56458; --red-soft:#FCE9E7;
-  --mono:Menlo,Consolas,monospace;
+:root {
+  --canvas: #0F1115;
+  --surface: #161A22;
+  --surface-subtle: #1C212B;
+  --surface-hover: #222936;
+  --border: #2A3241;
+  --border-subtle: #1E2532;
+  --text-primary: #F0F3F6;
+  --text-secondary: #8B949E;
+  --text-tertiary: #6E7681;
+  --accent: #388BFD;
+  --accent-soft: rgba(56, 139, 253, 0.12);
+  --green: #3FB950;
+  --green-soft: rgba(63, 185, 80, 0.12);
+  --orange: #D29922;
+  --orange-soft: rgba(210, 153, 34, 0.12);
+  --red: #F85149;
+  --red-soft: rgba(248, 81, 73, 0.12);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark){
-  :root{
-    --text:#FFFFFF; --text2:rgba(255,255,255,.65); --canvas:#191919; --soft:#202020; --soft2:#2a2a29;
-    --border:rgba(255,255,255,.2); --blue:#5E9FE8; --blue-soft:rgba(94,159,232,.12);
-    --green:#72BC8F; --green-soft:rgba(114,188,143,.12); --orange:#DE9255; --orange-soft:rgba(222,146,85,.12);
-    --red:#E97366; --red-soft:rgba(233,115,102,.12);
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --canvas: #F6F8FA;
+    --surface: #FFFFFF;
+    --surface-subtle: #F3F4F6;
+    --surface-hover: #E5E7EB;
+    --border: #D0D7DE;
+    --border-subtle: #E1E4E8;
+    --text-primary: #1F2328;
+    --text-secondary: #656D76;
+    --text-tertiary: #8C959F;
+    --accent: #0969DA;
+    --accent-soft: rgba(9, 105, 218, 0.1);
+    --green: #1A7F37;
+    --green-soft: rgba(26, 127, 55, 0.1);
+    --orange: #9A6700;
+    --orange-soft: rgba(154, 103, 0, 0.1);
+    --red: #CF222E;
+    --red-soft: rgba(207, 34, 46, 0.1);
   }
 }
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--canvas);color:var(--text);font-size:15px;line-height:1.5;padding:16px}
-.wrap{max-width:1080px;margin:0 auto}
-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-header h1{font-size:19px;font-weight:650;letter-spacing:-.01em}
-header p{font-size:13px;color:var(--text2);margin-top:2px}
-.badge{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--border);white-space:nowrap}
-.badge .dot{width:8px;height:8px;border-radius:50%}
-.badge.ok{background:var(--green-soft);color:var(--green);border-color:transparent}.badge.ok .dot{background:var(--green)}
-.badge.blip{background:var(--orange-soft);color:var(--orange);border-color:transparent}.badge.blip .dot{background:var(--orange)}
-.badge.alarm{background:var(--red-soft);color:var(--red);border-color:transparent}.badge.alarm .dot{background:var(--red);animation:pulse 1s infinite}
-@keyframes pulse{50%{opacity:.35}}
-.grid{display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:stretch}
-.grid>*,.right>*{min-width:0}
-.card{background:var(--soft);border:1px solid var(--border);border-radius:12px;overflow:hidden;min-width:0}
-.card h2{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);padding:12px 16px 0}
-/* chat */
-.chat{display:flex;flex-direction:column;height:604px}
-.chatlog{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
-.msg{max-width:88%;padding:8px 12px;border-radius:12px;font-size:14px}
-.msg.user{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:4px}
-.msg.bot{align-self:flex-start;background:var(--soft2);border-bottom-left-radius:4px}
-.msg .score{display:block;margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--text2)}
-.msg .score b{font-weight:650}
-.msg.hit .score b{color:var(--orange)}
-.sysnote{align-self:center;font-size:12px;color:var(--text2);text-align:center}
-.chatctl{border-top:1px solid var(--border);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
-.chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{font-size:12px;padding:6px 10px;min-height:32px;border-radius:999px;border:1px solid var(--border);background:var(--canvas);color:var(--text);cursor:pointer}
-.chip:hover{background:var(--soft2)}
-.row{display:flex;gap:8px}
-input[type=text]{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--canvas);color:var(--text);font-size:14px}
-input[type=text]:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:transparent}
-button.primary{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;min-height:44px}
-button.primary:disabled{opacity:.5;cursor:default}
-button.ghost{background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer;min-height:44px}
-button.ghost:hover{background:var(--soft2)}
-/* right column */
-.right{display:flex;flex-direction:column;gap:16px}
-.pipe{display:flex;align-items:stretch;gap:6px;padding:12px 16px 16px;overflow-x:auto}
-.step{flex:1;min-width:86px;text-align:center;padding:10px 6px;border-radius:8px;border:1px solid var(--border);background:var(--canvas);transition:all .25s}
-.step .ico{font-size:16px;display:block;margin-bottom:2px}
-.step .nm{font-size:11.5px;font-weight:600;display:block}
-.step .sub{font-size:10.5px;color:var(--text2);display:block}
-.step.active{border-color:var(--blue);background:var(--blue-soft);box-shadow:0 1px 2px rgba(0,0,0,.05)}
-.step.done{border-color:transparent;background:var(--soft2)}
-.arrow{align-self:center;color:var(--text2);font-size:12px;flex:0 0 auto}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 16px 16px}
-.stat{background:var(--canvas);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
-.stat .lb{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.stat .vl{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:2px}
-.stat .hint{font-size:11px;color:var(--text2)}
-.stat.warn .vl{color:var(--orange)}
-.stat.bad .vl{color:var(--red)}
-.charts{padding:8px 16px 14px}
-canvas{width:100%;display:block}
-.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);padding:0 16px 12px}
-.legend span{display:inline-flex;align-items:center;gap:5px}
-.sw{width:14px;height:3px;border-radius:2px;display:inline-block}
-footer{margin-top:14px;font-size:12.5px;color:var(--text2);max-width:760px}
-@media (max-width:840px){
-  .grid{grid-template-columns:1fr}
-  .chat{height:440px}
-  .stats{grid-template-columns:repeat(2,1fr)}
-  body{padding:12px}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 24px 16px;
+  min-height: 100vh;
+}
+
+.wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.title-group h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-group p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  transition: all 0.2s ease;
+}
+
+.badge .dot { width: 7px; height: 7px; border-radius: 50%; }
+.badge.ok { background: var(--green-soft); color: var(--green); }
+.badge.ok .dot { background: var(--green); }
+.badge.blip { background: var(--orange-soft); color: var(--orange); }
+.badge.blip .dot { background: var(--orange); }
+.badge.alarm { background: var(--red-soft); color: var(--red); }
+.badge.alarm .dot { background: var(--red); animation: pulse 1.2s infinite ease-in-out; }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.grid {
+  display: grid;
+  grid-template-columns: 440px 1fr;
+  gap: 20px;
+  align-items: stretch;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-header h2 {
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+/* Chat UI */
+.chat { height: 640px; }
+.chatlog {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.msg.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #FFFFFF;
+  border-bottom-right-radius: 2px;
+}
+
+.msg.bot {
+  align-self: flex-start;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-bottom-left-radius: 2px;
+}
+
+.msg .score {
+  display: block;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.msg .score b { color: var(--text-primary); font-weight: 600; }
+.msg.breach .score b { color: var(--orange); }
+.msg.drifted .score b { color: var(--red); }
+
+.sysnote {
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  background: var(--surface-subtle);
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.chatctl {
+  border-top: 1px solid var(--border);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+input[type=text] {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+input[type=text]:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+button.btn-primary {
+  background: var(--accent);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+button.btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+button.btn-secondary {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+button.btn-secondary:hover {
+  background: var(--surface-hover);
+}
+
+.chat-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  padding: 0 2px;
+}
+
+.chat-status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.chat-status.ok .dot { background: var(--green); }
+.chat-status.blip { color: var(--orange); }
+.chat-status.blip .dot { background: var(--orange); }
+.chat-status.alarm { color: var(--red); }
+.chat-status.alarm .dot { background: var(--red); }
+
+.action-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* Right Panel */
+.right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pipeline-grid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  overflow-x: auto;
+}
+
+.pipe-step {
+  flex: 1;
+  min-width: 80px;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+  transition: all 0.2s ease;
+}
+
+.pipe-step .name { font-size: 11px; font-weight: 600; display: block; }
+.pipe-step .sub { font-size: 10px; color: var(--text-tertiary); display: block; font-family: var(--font-mono); margin-top: 2px; }
+.pipe-step.active { border-color: var(--accent); background: var(--accent-soft); }
+.pipe-step.done { border-color: transparent; }
+
+.pipe-arrow { color: var(--text-tertiary); font-size: 12px; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+.stat-box {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.stat-box .label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-box .value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 4px 0 2px;
+}
+
+.stat-box .hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.stat-box.breach .value { color: var(--orange); }
+.stat-box.alarm .value { color: var(--red); }
+
+.charts-container {
+  padding: 16px 18px 12px;
+}
+
+canvas {
+  width: 100%;
+  display: block;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  padding: 0 18px 14px;
+}
+
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+
+footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+  .chat { height: 480px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  body { padding: 16px 12px; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-<header>
-  <div>
-    <h1>Drift-Detector <span style="color:var(--text2);font-weight:400">· interactive demo</span></h1>
-    <p>A simulated chat model on the left; the detector scores every assistant reply on the right.</p>
+  <header>
+    <div class="title-group">
+      <h1>Drift-Detector <span style="font-weight: 400; color: var(--text-secondary); font-size: 16px;">· Interactive Architecture Demo</span></h1>
+      <p>Continuous semantic drift monitoring with dynamic auto-baselining and Page-Hinkley CUSUM early warnings.</p>
+    </div>
+    <div class="badge ok" id="badge">
+      <span class="dot"></span>
+      <span id="badgeTxt">nominal · on baseline</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- Left Column: Simulated Chat -->
+    <section class="card chat" aria-label="Simulated Agent Interaction">
+      <div class="card-header">
+        <h2>Chat Session (Live Agent Scoring)</h2>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);" id="turnCount">Turns: 0</span>
+      </div>
+      <div class="chatlog" id="chatlog">
+        <div class="sysnote">[drift: active · dynamic auto-baseline ~1KB centroid]</div>
+      </div>
+      <div class="chatctl">
+        <div class="chips">
+          <button class="chip" data-k="code">💻 Ask Code Task</button>
+          <button class="chip" data-k="blip">⚡ One-off Joke (Blip)</button>
+          <button class="chip" data-k="recipe">🍕 Drift: Cooking</button>
+          <button class="chip" data-k="travel">✈️ Drift: Travel</button>
+        </div>
+        <div class="input-row">
+          <input type="text" id="inp" placeholder="Type a message to the agent…" aria-label="Message">
+          <button class="btn-primary" id="send">Send</button>
+        </div>
+        <div class="chat-status ok" id="inputStatus">
+          <span class="dot"></span>
+          <span id="inputStatusTxt">status: nominal · tracking baseline</span>
+        </div>
+        <div class="action-row">
+          <button class="btn-secondary" id="auto" style="flex: 1.4;">▶ Auto-Run Drift Sequence</button>
+          <button class="btn-secondary" id="compact" style="flex: 1;">🔄 Compact Context</button>
+          <button class="btn-secondary" id="reset">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Pipeline & Metrics -->
+    <section class="right">
+      <div class="card">
+        <div class="card-header">
+          <h2>Evaluation Pipeline (Per Assistant Reply)</h2>
+        </div>
+        <div class="pipeline-grid" id="pipeline">
+          <div class="pipe-step" data-s="0"><span class="name">Assistant Turn</span><span class="sub">Raw Text</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step" data-s="1"><span class="name">Embed</span><span class="sub">d=256</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step" data-s="2"><span class="name">L2 Normalise</span><span class="sub">||v|| = 1.0</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step" data-s="3"><span class="name">Cosine d<sub>t</sub></span><span class="sub">1 - v·c</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step" data-s="4"><span class="name">Page-Hinkley</span><span class="sub">U<sub>t</sub> - m<sub>t</sub></span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step" data-s="5"><span class="name">Verdict</span><span class="sub">Status</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Live Session Metrics</h2>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-box" id="stDist">
+            <div class="label">Distance d<sub>t</sub></div>
+            <div class="value" id="vDist">–</div>
+            <div class="hint">threshold: <span id="vThr">–</span> (p95)</div>
+          </div>
+          <div class="stat-box" id="stMean">
+            <div class="label">Running Mean</div>
+            <div class="value" id="vMean">–</div>
+            <div class="hint">cumulative mean</div>
+          </div>
+          <div class="stat-box" id="stPH">
+            <div class="label">PH Statistic</div>
+            <div class="value" id="vPH">–</div>
+            <div class="hint">alarm λ = <span id="vLam">1.60</span></div>
+          </div>
+          <div class="stat-box" id="stBr">
+            <div class="label">Sustained Drift</div>
+            <div class="value" id="vDrift">0</div>
+            <div class="hint">streak ≥ 2 turns</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Real-Time CUSUM Trajectory</h2>
+        </div>
+        <div class="charts-container">
+          <canvas id="chart" height="230" role="img" aria-label="Distance and Page-Hinkley trend chart"></canvas>
+        </div>
+        <div class="legend">
+          <span><span class="swatch" style="background: var(--accent);"></span> Cosine Distance (d<sub>t</sub>)</span>
+          <span><span class="swatch" style="background: var(--orange); height: 0; border-top: 2px dashed var(--orange);"></span> Breach Threshold (p95)</span>
+          <span><span class="swatch" style="background: var(--red);"></span> Page-Hinkley (U<sub>t</sub> - m<sub>t</sub>)</span>
+          <span><span class="swatch" style="height: 0; border-top: 2px dashed var(--red);"></span> Alarm Trigger (λ)</span>
+        </div>
+      </div>
+    </section>
   </div>
-  <div class="badge ok" id="badge"><span class="dot"></span><span id="badgeTxt">Stable · on baseline</span></div>
-</header>
 
-<div class="grid">
-  <section class="card chat" aria-label="Simulated chat">
-    <h2>Chat (model inside)</h2>
-    <div class="chatlog" id="chatlog">
-      <div class="sysnote">Baseline calibrated from 20 on-topic replies about the detector.<br>Try the auto-run, the chips, or type your own message.</div>
-    </div>
-    <div class="chatctl">
-      <div class="chips" id="chips">
-        <button class="chip" data-k="on">Ask on topic</button>
-        <button class="chip" data-k="blip">One-off joke (blip)</button>
-        <button class="chip" data-k="cook">Drift to cooking</button>
-        <button class="chip" data-k="travel">Drift to travel</button>
-      </div>
-      <div class="row">
-        <input type="text" id="inp" placeholder="Type a message to the model…" aria-label="Message">
-        <button class="primary" id="send">Send</button>
-      </div>
-      <div class="row">
-        <button class="primary" id="auto" style="flex:1">▶ Auto-run drifting conversation</button>
-        <button class="ghost" id="reset">Reset</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="right">
-    <div class="card">
-      <h2>Detector pipeline · per assistant reply</h2>
-      <div class="pipe" id="pipe">
-        <div class="step" data-s="0"><span class="ico">💬</span><span class="nm">Reply</span><span class="sub">assistant turn</span></div>
-        <span class="arrow">→</span>
-        <div class="step" data-s="1"><span class="ico">🧬</span><span class="nm">Embed</span><span class="sub">text → vector</span></div>
-        <span class="arrow">→</span>
-        <div class="step" data-s="2"><span class="ico">📐</span><span class="nm">Normalise</span><span class="sub">L2 unit length</span></div>
-        <span class="arrow">→</span>
-        <div class="step" data-s="3"><span class="ico">📏</span><span class="nm">Distance</span><span class="sub">cosine vs centroid</span></div>
-        <span class="arrow">→</span>
-        <div class="step" data-s="4"><span class="ico">📈</span><span class="nm">Page-Hinkley</span><span class="sub">sustained trend</span></div>
-        <span class="arrow">→</span>
-        <div class="step" data-s="5"><span class="ico">🚦</span><span class="nm">Verdict</span><span class="sub">stable / blip / drift</span></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Live metrics</h2>
-      <div class="stats">
-        <div class="stat" id="stDist"><div class="lb">Distance d<sub>t</sub></div><div class="vl" id="vDist">–</div><div class="hint">threshold <span id="vThr">–</span> (p95)</div></div>
-        <div class="stat" id="stMean"><div class="lb">Running mean</div><div class="vl" id="vMean">–</div><div class="hint">of session distances</div></div>
-        <div class="stat" id="stPH"><div class="lb">PH<sub>t</sub> = U<sub>t</sub> − m<sub>t</sub></div><div class="vl" id="vPH">–</div><div class="hint">λ = <span id="vLam">–</span></div></div>
-        <div class="stat" id="stBr"><div class="lb">Breaches</div><div class="vl" id="vBr">0</div><div class="hint">single-turn spikes</div></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Session chart</h2>
-      <div class="charts"><canvas id="chart" height="250" role="img" aria-label="Distance and Page-Hinkley chart"></canvas></div>
-      <div class="legend">
-        <span><span class="sw" style="background:var(--blue)"></span> cosine distance per turn</span>
-        <span><span class="sw" style="background:var(--orange);height:0;border-top:2px dashed var(--orange)"></span> breach threshold (p95)</span>
-        <span><span class="sw" style="background:var(--red)"></span> Page-Hinkley statistic</span>
-        <span><span class="sw" style="height:0;border-top:2px dashed var(--red)"></span> alarm level λ</span>
-      </div>
-    </div>
-  </section>
+  <footer>
+    <div>Drift-Detector Core: L2-Normalised Vector Distance + Page-Hinkley Cumulative Sum Gating.</div>
+    <div><a href="https://github.com/krshirkoohi/drift-detector" target="_blank" style="color: var(--accent); text-decoration: none;">GitHub Repository</a></div>
+  </footer>
 </div>
-
-<footer>
-  Only the <b>assistant's reply</b> is scored: it is embedded, L2-normalised and compared with the centroid of the calibration baseline. A single spike above the p95 threshold is a <b style="color:var(--orange)">blip</b>; the alarm only fires when the Page-Hinkley statistic shows a <b style="color:var(--red)">sustained climb</b> past λ.
-</footer>
-</div>
-
-<script id="core">
-/* ===== CORE (pure logic, no DOM) ===== */
-const TOPIC_LIST=[
- {name:'drift',words:new Set('drift embedding embeddings embedded embeds vector vectors cosine distance distances baseline centroid threshold percentile calibration calibrates calibrated alarm detector semantic turn turns session sessions hinkley cusum metric metrics normalised jsonl cli proxy sidecar score scores scored scoring signal trend sustained provider providers gemini openai deterministic offline exit codes ci spike spikes blip divergence sequential mean minimum statistic verdict'.split(' '))},
- {name:'cooking',words:new Set('recipe recipes enchiladas oven garlic butter sauce simmer simmering chilli tortilla tortillas cheese bake baked dinner kitchen flavour spice spiced roast pan chop chopped onion taste salsa cook cooking meal ingredients chicken salad corn hungry serve soften warm'.split(' '))},
- {name:'travel',words:new Set('holiday holidays beach flight flights lisbon hotel itinerary coast coastal sunshine travel trip packing airport ocean city tour museums museum train september wandering town book booking break'.split(' '))},
- {name:'smalltalk',words:new Set('joke jokes funny laugh weekend weather coffee chat music film ladder chef bring raised'.split(' '))}
-];
-function tokenize(t){return t.toLowerCase().replace(/[^a-z']+/g,' ').split(' ').filter(Boolean)}
-function hashTok(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
-function embed(text){
-  const toks=tokenize(text);
-  const scale=Math.sqrt(toks.length)||1;
-  const tScores=TOPIC_LIST.map(tp=>toks.reduce((a,w)=>a+(tp.words.has(w)?1:0),0)/scale);
-  const res=new Array(10).fill(0);
-  for(const w of toks){const h=hashTok(w);res[h%10]+=((h>>>4)&1?1:-1)/scale}
-  const v=[...tScores,...res.map(x=>x*0.22),0.06];
-  const n=Math.hypot(...v)||1;
-  return v.map(x=>x/n);
-}
-function cosDist(a,b){let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return Math.max(0,1-s)}
-function centroidOf(vecs){
-  const c=new Array(vecs[0].length).fill(0);
-  for(const v of vecs)for(let i=0;i<v.length;i++)c[i]+=v[i];
-  const n=Math.hypot(...c)||1;return c.map(x=>x/n);
-}
-function p95(xs){const s=[...xs].sort((a,b)=>a-b);const i=0.95*(s.length-1);const lo=Math.floor(i),hi=Math.ceil(i);return s[lo]+(s[hi]-s[lo])*(i-lo)}
-class PageHinkley{
-  constructor(delta,lambda){this.delta=delta;this.lambda=lambda;this.reset()}
-  reset(){this.n=0;this.mean=0;this.U=0;this.m=0;this.PH=0;this.alarmed=false}
-  update(x){
-    this.n++;this.mean+=(x-this.mean)/this.n;
-    this.U+=x-this.mean-this.delta;
-    this.m=Math.min(this.m,this.U);
-    this.PH=this.U-this.m;
-    if(this.PH>this.lambda)this.alarmed=true;
-    return this.PH;
-  }
-}
-const BASELINE_REPLIES=[
- 'Each assistant reply is embedded into a vector and compared against the baseline centroid.',
- 'The baseline centroid is the normalised mean of the embeddings from earlier on-topic replies.',
- 'Cosine distance is computed on L2 normalised vectors, so phrasing matters less than meaning.',
- 'The breach threshold is auto calibrated from the 95th percentile of baseline distances.',
- 'No manual tuning is needed because calibration comes from the baseline sample itself.',
- 'The detector scores every turn and reports the distance from the session baseline.',
- 'A single off-topic reply is treated as a blip rather than a drift alarm.',
- 'The Page-Hinkley test gates the alarm behind a sustained climb in distance.',
- 'CUSUM was considered but Page-Hinkley adapts to the running mean of the session.',
- 'The CLI can batch score a JSONL session file with CI friendly exit codes.',
- 'A sidecar service accepts each turn over HTTP and returns a drift verdict.',
- 'An OpenAI compatible proxy can score responses transparently for any client.',
- 'Embeddings can come from Gemini, an OpenAI compatible endpoint, or an offline provider.',
- 'The deterministic offline provider keeps tests and CI runs reproducible.',
- 'Distances are measured per turn so the session chart shows the semantic trend.',
- 'Only the meaning of the assistant reply is scored, not the exact wording.',
- 'The threshold line marks where a reply counts as a breach of the baseline.',
- 'Sequential analysis filters isolated spikes while flagging sustained divergence.',
- 'The centroid summarises the topic of the session in embedding space.',
- 'Exit codes let a pipeline fail automatically when drift is detected in a session.'
-];
-const SCRIPT=[
- {u:'How does Drift-Detector decide a reply is off topic?',a:'It embeds the assistant reply into a vector, then measures cosine distance to the baseline centroid built from earlier on-topic turns.'},
- {u:'Where does the baseline come from?',a:'The baseline is a set of embeddings from clean on-topic replies; their normalised mean becomes the centroid and their spread calibrates the threshold.'},
- {u:'So no manual tuning?',a:'Right, the 95th percentile of baseline distances sets the breach threshold automatically, so calibration needs no manual tuning.'},
- {u:'Which embedding providers can it use?',a:'It is provider agnostic: Gemini, any OpenAI compatible endpoint, or the deterministic offline provider used for tests and CI.'},
- {u:'Ha, ok. Tell me a joke before we carry on.',a:'Why did the chef bring a ladder to the kitchen? The recipe said the flavour had to be raised before the sauce could simmer with the garlic and butter.'},
- {u:'Back to it. What is the Page-Hinkley test?',a:'Page-Hinkley tracks the cumulative gap between each distance and the running mean; when that sum climbs far above its historical minimum, drift is declared.'},
- {u:'Why not alarm on the first spike?',a:'A single spike is a transient blip; the sustained trend rule waits for a persistent climb in distance across turns before raising the alarm.'},
- {u:'All this talk of simmering sauces has me hungry. What should I cook tonight?',a:'While the detector keeps scoring this session, you could bake enchiladas: fill tortillas with chicken, cover them in salsa and cheese, and let the sauce simmer with chilli.'},
- {u:'How do I get the sauce right?',a:'Soften the onion and garlic in butter, add the chilli and salsa, then simmer gently so the flavour deepens before it goes in the oven.'},
- {u:'What would you serve on the side?',a:'Roast some spiced corn, chop a fresh salad, and warm extra tortillas; the kitchen will smell amazing by the time dinner is ready.'},
- {u:'I should book a holiday after all this cooking.',a:'September is lovely in Lisbon: coastal sunshine, easy flights, and a hotel near the old city makes the whole trip simple to plan.'},
- {u:'Beach or city break?',a:'Do both: mornings at the beach, afternoons wandering the museums and old town, then a train along the coast for a day tour.'}
-];
-const CHIP_TURNS={
- on:[{u:'What does the sidecar service do?',a:'The sidecar accepts each turn over HTTP and returns a drift verdict, so any chat surface can use the detector without embedding it directly.'},
-     {u:'How would I run it in CI?',a:'Batch score a JSONL session file with the CLI; the exit codes let the pipeline fail automatically when sustained drift is detected.'},
-     {u:'What makes the threshold robust?',a:'It is calibrated from the 95th percentile of baseline distances, so the session sets its own tolerance with no manual tuning.'}],
- blip:[{u:'Quick joke before we continue?',a:'Why did the chef bring a ladder to the kitchen? Apparently the flavour of the sauce needed raising before dinner.'}],
- cook:[{u:'What should I cook tonight?',a:'Bake enchiladas: fill tortillas with chicken, cover in salsa and cheese, then let the sauce simmer with onion, garlic and chilli.'},
-       {u:'And the sauce?',a:'Soften the onion and garlic in butter, add chilli and salsa, and simmer gently so the flavour deepens before the oven.'},
-       {u:'Any sides?',a:'Roast spiced corn, chop a fresh salad, and warm extra tortillas; the kitchen will smell amazing by dinner.'}],
- travel:[{u:'Where should I go on holiday?',a:'September is lovely in Lisbon: coastal sunshine, easy flights, and a hotel near the old city keeps the trip simple.'},
-         {u:'Beach or city?',a:'Do both: mornings on the beach, afternoons in the museums and old town, then a train along the coast for a day tour.'}]
-};
-function modelReply(userText){
-  const toks=tokenize(userText);
-  let best=null,bestScore=0;
-  for(const k of ['on','blip','cook','travel']){
-    const tp={on:'drift',blip:'smalltalk',cook:'cooking',travel:'travel'}[k];
-    const bank=TOPIC_LIST.find(t=>t.name===tp).words;
-    const sc=toks.reduce((a,w)=>a+(bank.has(w)?1:0),0);
-    if(sc>bestScore){bestScore=sc;best=k}
-  }
-  const key=best||'on';
-  const opts=CHIP_TURNS[key];
-  return opts[Math.floor(Math.random()*opts.length)].a;
-}
-function buildDetector(delta,lambda){
-  const vecs=BASELINE_REPLIES.map(embed);
-  const centroid=centroidOf(vecs);
-  const baseDists=vecs.map(v=>cosDist(v,centroid));
-  const threshold=p95(baseDists);
-  const ph=new PageHinkley(delta,lambda);
-  return {centroid,threshold,ph,
-    score(text){const d=cosDist(embed(text),centroid);const PH=this.ph.update(d);
-      return {d,PH,mean:this.ph.mean,breach:d>this.threshold,alarm:this.ph.alarmed}}};
-}
-if(typeof module!=='undefined')module.exports={buildDetector,SCRIPT,embed,cosDist};
-/* ===== END CORE ===== */
-</script>
 
 <script>
-/* ===== UI ===== */
-const DELTA=0.02, LAMBDA=1.6;
-let det, dists, phs, breaches, busy=false, autoTimer=null;
-const $=id=>document.getElementById(id);
-const chatlog=$('chatlog');
+/* ===== CORE DRIFT DETECTION LOGIC ===== */
+const TOPIC_VOCAB = {
+  code: 'drift embedding embeddings vector vectors cosine distance baseline centroid threshold calibration alarm detector semantic turn session hinkley cusum metric jsonl cli proxy score unit test bug refactor python javascript typescript api fastmcp compaction buffer memory'.split(' '),
+  recipe: 'recipe cooking bake roast pasta garlic butter pan sauce simmer chilli cheese kitchen flavour spice meal chicken ingredients bowl prep oven oven temperature bake dinner soup salad'.split(' '),
+  travel: 'holiday flight beach hotel lisbon itinerary coast ocean airport trip train pack museum suitcase booking flight sightseeing wander city sunshine tour'.split(' '),
+  smalltalk: 'joke laugh funny ladder chef weather coffee morning chat weekend film music fun hello hi hey'.split(' ')
+};
 
-function init(){
-  det=buildDetector(DELTA,LAMBDA);
-  dists=[];phs=[];breaches=0;busy=false;
-  if(autoTimer){clearTimeout(autoTimer);autoTimer=null}
-  chatlog.innerHTML='<div class="sysnote">Baseline calibrated from 20 on-topic replies about the detector.<br>Try the auto-run, the chips, or type your own message.</div>';
-  $('vThr').textContent=det.threshold.toFixed(3);
-  $('vLam').textContent=LAMBDA.toFixed(2);
-  $('vDist').textContent='–';$('vMean').textContent='–';$('vPH').textContent='–';$('vBr').textContent='0';
-  $('stDist').className='stat';$('stPH').className='stat';
-  setBadge('ok','Stable · on baseline');
-  document.querySelectorAll('.step').forEach(s=>s.className='step');
-  $('auto').disabled=false;$('auto').textContent='▶ Auto-run drifting conversation';
-  draw();
+function tokenize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9']+/g, ' ').split(' ').filter(Boolean);
 }
-function setBadge(cls,txt){const b=$('badge');b.className='badge '+cls;$('badgeTxt').textContent=txt}
-function addMsg(cls,text){
-  const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
-  chatlog.appendChild(d);chatlog.scrollTop=chatlog.scrollHeight;return d;
-}
-function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-async function runPipeline(){
-  const steps=document.querySelectorAll('.step');
-  steps.forEach(s=>s.className='step');
-  for(const s of steps){s.classList.add('active');await sleep(120);s.classList.remove('active');s.classList.add('done')}
-}
-async function processTurn(userText,replyText){
-  if(busy)return;busy=true;
-  addMsg('user',userText);
-  await sleep(250);
-  const bubble=addMsg('bot',replyText);
-  const r=det.score(replyText);
-  await runPipeline();
-  dists.push(r.d);phs.push(r.PH);if(r.breach)breaches++;
-  const sc=document.createElement('span');sc.className='score';
-  sc.innerHTML='d = <b>'+r.d.toFixed(3)+'</b> · PH = <b>'+r.PH.toFixed(2)+'</b>'+(r.breach?' · above threshold':'');
-  if(r.breach)bubble.classList.add('hit');
-  bubble.appendChild(sc);
-  $('vDist').textContent=r.d.toFixed(3);
-  $('vMean').textContent=r.mean.toFixed(3);
-  $('vPH').textContent=r.PH.toFixed(2);
-  $('vBr').textContent=breaches;
-  $('stDist').className='stat'+(r.breach?' warn':'');
-  $('stPH').className='stat'+(r.alarm?' bad':(r.PH>LAMBDA*0.5?' warn':''));
-  if(r.alarm){setBadge('alarm','Drift alarm · sustained divergence');}
-  else if(r.breach){setBadge('blip','Blip · spike above threshold');}
-  else{setBadge('ok','Stable · on baseline');}
-  if(r.alarm && !processTurn.alarmNoted){processTurn.alarmNoted=true;
-    const n=document.createElement('div');n.className='sysnote';n.innerHTML='🚨 <b>Drift alarm raised</b>: PH exceeded λ, the climb is sustained, not a one-off.';
-    chatlog.appendChild(n);chatlog.scrollTop=chatlog.scrollHeight;}
-  draw();busy=false;
-}
-/* chart */
-function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
-function draw(){
-  const cv=$('chart');const dpr=window.devicePixelRatio||1;
-  const W=cv.clientWidth||600,H=250;
-  cv.width=W*dpr;cv.height=H*dpr;
-  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
-  const text2=cssVar('--text2'),border=cssVar('--border'),blue=cssVar('--blue'),orange=cssVar('--orange'),red=cssVar('--red');
-  const padL=40,padR=12;
-  const pane=(y0,h,maxV,label)=>({y0,h,maxV,label,x:i=>padL+(W-padL-padR)*(dists.length<2?0.5:i/(dists.length-1)),y:v=>y0+h-(h*Math.min(v,maxV)/maxV)});
-  const maxD=Math.max(det.threshold*1.6,...dists,0.9);
-  const maxP=Math.max(LAMBDA*1.5,...phs);
-  const p1=pane(8,102,maxD,'distance');
-  const p2=pane(140,102,maxP,'Page-Hinkley');
-  ctx.font='10.5px -apple-system,sans-serif';
-  for(const p of [p1,p2]){
-    ctx.strokeStyle=border;ctx.lineWidth=1;
-    ctx.strokeRect(padL,p.y0,W-padL-padR,p.h);
-    ctx.fillStyle=text2;ctx.textAlign='left';
-    ctx.fillText(p.label,padL+6,p.y0+13);
-    ctx.textAlign='right';
-    ctx.fillText(p.maxV.toFixed(2),padL-5,p.y0+11);
-    ctx.fillText('0',padL-5,p.y0+p.h);
+
+function hashToken(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
   }
-  const dash=(p,val,col)=>{ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle=col;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(padL,p.y(val));ctx.lineTo(W-padR,p.y(val));ctx.stroke();ctx.restore()};
-  dash(p1,det.threshold,orange);dash(p2,LAMBDA,red);
-  const line=(p,vals,col)=>{if(!vals.length)return;ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();
-    vals.forEach((v,i)=>{const x=p.x(i),y=p.y(v);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
-    vals.forEach((v,i)=>{ctx.fillStyle=(p===p1&&v>det.threshold)?orange:col;ctx.beginPath();ctx.arc(p.x(i),p.y(v),3,0,7);ctx.fill()});};
-  line(p1,dists,blue);line(p2,phs,red);
-  if(!dists.length){ctx.fillStyle=text2;ctx.textAlign='center';ctx.fillText('Send a message to start scoring turns',W/2,p1.y0+p1.h/2+30)}
+  return h >>> 0;
 }
-/* events */
-$('send').addEventListener('click',()=>{
-  const t=$('inp').value.trim();if(!t||busy)return;$('inp').value='';
-  processTurn(t,modelReply(t));
-});
-$('inp').addEventListener('keydown',e=>{if(e.key==='Enter')$('send').click()});
-document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
-  if(busy)return;const k=c.dataset.k;const opts=CHIP_TURNS[k];
-  const t=opts[Math.floor(Math.random()*opts.length)];
-  processTurn(t.u,t.a);
-}));
-$('auto').addEventListener('click',()=>{
-  init();$('auto').disabled=true;$('auto').textContent='Running…';
-  let i=0;
-  const step=async()=>{
-    if(i>=SCRIPT.length){$('auto').disabled=false;$('auto').textContent='▶ Auto-run drifting conversation';autoTimer=null;return}
-    const t=SCRIPT[i++];await processTurn(t.u,t.a);
-    autoTimer=setTimeout(step,650);
+
+function embed(text) {
+  const toks = tokenize(text);
+  const scale = Math.sqrt(toks.length) || 1;
+  const topicWeights = Object.keys(TOPIC_VOCAB).map(k => {
+    const vocab = new Set(TOPIC_VOCAB[k]);
+    return toks.reduce((acc, w) => acc + (vocab.has(w) ? 1 : 0), 0) / scale;
+  });
+  const hashProj = new Array(12).fill(0);
+  for (const w of toks) {
+    const h = hashToken(w);
+    hashProj[h % 12] += ((h >>> 4) & 1 ? 1 : -1) / scale;
+  }
+  const raw = [...topicWeights.map(x => x * 1.5), ...hashProj.map(x => x * 0.25), 0.05];
+  const norm = Math.hypot(...raw) || 1;
+  return raw.map(x => x / norm);
+}
+
+function cosineDist(a, b) {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return Math.max(0, 1.0 - dot);
+}
+
+function calculateCentroid(vecs) {
+  const c = new Array(vecs[0].length).fill(0);
+  for (const v of vecs) {
+    for (let i = 0; i < v.length; i++) c[i] += v[i];
+  }
+  const norm = Math.hypot(...c) || 1;
+  return c.map(x => x / norm);
+}
+
+class PageHinkleyEngine {
+  constructor(delta = 0.015, lambda = 1.6, burnIn = 2, sustain = 2) {
+    this.delta = delta;
+    this.lambda = lambda;
+    this.burnIn = burnIn;
+    this.sustain = sustain;
+    this.reset();
+  }
+
+  reset() {
+    this.n = 0;
+    this.mean = 0.0;
+    this.cum = 0.0;
+    this.cumMin = 0.0;
+    this.exceedStreak = 0;
+    this.alarmed = false;
+  }
+
+  update(x) {
+    this.n++;
+    this.mean += (x - this.mean) / this.n;
+    this.cum += x - this.mean - this.delta;
+    this.cumMin = Math.min(this.cumMin, this.cum);
+    const stat = this.cum - this.cumMin;
+    const elevated = stat > this.lambda && x > this.mean;
+    this.exceedStreak = elevated ? this.exceedStreak + 1 : 0;
+    this.alarmed = this.n > this.burnIn && this.exceedStreak >= this.sustain;
+    return { stat, mean: this.mean, alarmed: this.alarmed, streak: this.exceedStreak };
+  }
+}
+
+/* ===== SCRIPTED SIMULATION REPLIES ===== */
+const PRESETS = {
+  code: [
+    { u: "How does drift detection work in background sessions?", a: "The detector embeds each assistant reply into a normalized vector, measuring cosine distance against the initial session centroid." },
+    { u: "What happens when chat context is compacted?", a: "The compaction hook invokes drift_compact_reset, wiping historical accumulators and establishing a fresh 1KB centroid from the summary." },
+    { u: "How does Page-Hinkley forgive isolated jokes?", a: "Page-Hinkley tracks the cumulative difference from the running mean. A single-turn spike resets if the next turn returns to the domain." }
+  ],
+  blip: [
+    { u: "Tell me a quick joke before we resume coding.", a: "Why do programmers prefer dark mode? Because light attracts bugs! Now back to our database migration pipeline." }
+  ],
+  recipe: [
+    { u: "What should I cook for dinner tonight?", a: "You could make baked chicken pasta: simmer tomatoes with minced garlic, fresh basil, and olive oil, then bake with mozzarella." },
+    { u: "How long should it bake in the oven?", a: "Preheat to 190°C and bake for 25 minutes until the cheese is melted, golden, and bubbling at the edges." },
+    { u: "What wine pairs best with this dish?", a: "A crisp Pinot Grigio or a light Chianti pairs wonderfully with rich tomato sauce and melted cheese." }
+  ],
+  travel: [
+    { u: "I need holiday ideas for September.", a: "Lisbon is fantastic in autumn: warm sunny coastal weather, historic tram rides, ocean beaches, and great seafood." },
+    { u: "Should I book a hotel in the old town?", a: "Yes, staying in Alfama or Baixa gives you walkable access to historic castles, scenic viewpoints, and cafes." }
+  ]
+};
+
+const AUTO_RUN_TURNS = [
+  { u: "How does Drift-Detector monitor AI agents?", a: "It measures the semantic vector distance of assistant replies against an on-task baseline centroid, flagging persistent topic divergence." },
+  { u: "Is there any manual threshold tuning required?", a: "No, thresholds calibrate automatically from the 95th percentile spread of baseline samples, ensuring zero manual tuning." },
+  { u: "Tell me a joke before we write tests.", a: "Why did the developer go broke? Because they used up all their cache! Now let's return to configuring pytest fixtures." },
+  { u: "Back to the task: how does compaction reset work?", a: "When context compaction occurs, the detector re-seeds its centroid using the compressed summary and resets Page-Hinkley accumulators to zero." },
+  { u: "All this work makes me hungry, what should I cook?", a: "Bake fresh homemade pizza: prepare dough, spread spicy tomato sauce, top with fresh mozzarella and basil, and bake at 250°C." },
+  { u: "How do I get the crust super crispy?", a: "Use a preheated pizza stone or cast iron pan on the highest oven rack to guarantee maximum heat transfer." },
+  { u: "What dessert should I serve after pizza?", a: "A classic Italian tiramisu with espresso-soaked ladyfingers, creamy mascarpone, and a heavy dusting of cocoa powder." }
+];
+
+/* ===== UI ORCHESTRATION ===== */
+const BASELINE_SAMPLES = [
+  "Building backend APIs in Python and FastAPI",
+  "Writing unit tests with pytest and coverage reporting",
+  "Database migrations and PostgreSQL query optimisation",
+  "Configuring asynchronous message queues and background workers"
+];
+
+let baseCentroid, threshold = 0.835, phEngine, distances = [], phStats = [], driftedTurns = 0, isBusy = false, autoTimer = null;
+const $ = id => document.getElementById(id);
+
+function initSession() {
+  const baseVecs = BASELINE_SAMPLES.map(embed);
+  baseCentroid = calculateCentroid(baseVecs);
+  const baseDists = baseVecs.map(v => cosineDist(v, baseCentroid));
+  threshold = Math.max(...baseDists) * 1.5;
+  phEngine = new PageHinkleyEngine(0.015, 1.6, 2, 2);
+  distances = [];
+  phStats = [];
+  driftedTurns = 0;
+  isBusy = false;
+
+  if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+  $('chatlog').innerHTML = '<div class="sysnote">[drift: active · dynamic auto-baseline ~1KB centroid]</div>';
+  $('turnCount').textContent = 'Turns: 0';
+  $('vThr').textContent = threshold.toFixed(3);
+  $('vDist').textContent = '–';
+  $('vMean').textContent = '–';
+  $('vPH').textContent = '–';
+  $('vDrift').textContent = '0';
+  $('stDist').className = 'stat-box';
+  $('stPH').className = 'stat-box';
+  updateBadges('ok', 'status: nominal · tracking baseline');
+  document.querySelectorAll('.pipe-step').forEach(el => el.className = 'pipe-step');
+  $('auto').disabled = false;
+  $('auto').textContent = '▶ Auto-Run Drift Sequence';
+  renderChart();
+}
+
+function updateBadges(cls, text) {
+  const b = $('badge');
+  b.className = 'badge ' + cls;
+  $('badgeTxt').textContent = text;
+  const statusEl = $('inputStatus');
+  statusEl.className = 'chat-status ' + cls;
+  $('inputStatusTxt').textContent = text;
+}
+
+function appendMessage(sender, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + sender;
+  div.textContent = text;
+  $('chatlog').appendChild(div);
+  $('chatlog').scrollTop = $('chatlog').scrollHeight;
+  return div;
+}
+
+async function animatePipeline() {
+  const steps = document.querySelectorAll('.pipe-step');
+  for (const step of steps) {
+    step.classList.add('active');
+    await new Promise(r => setTimeout(r, 90));
+    step.classList.remove('active');
+    step.classList.add('done');
+  }
+}
+
+async function handleTurn(userText, replyText) {
+  if (isBusy) return;
+  isBusy = true;
+
+  appendMessage('user', userText);
+  await new Promise(r => setTimeout(r, 200));
+
+  const botMsg = appendMessage('bot', replyText);
+  const v = embed(replyText);
+  const d = cosineDist(v, baseCentroid);
+  const phRes = phEngine.update(d);
+
+  await animatePipeline();
+
+  distances.push(d);
+  phStats.push(phRes.stat);
+
+  const isBreach = d > threshold;
+  const isDrift = phRes.alarmed;
+  if (isDrift) driftedTurns++;
+
+  const scoreEl = document.createElement('span');
+  scoreEl.className = 'score';
+  scoreEl.innerHTML = `d<sub>t</sub> = <b>${d.toFixed(3)}</b> · PH = <b>${phRes.stat.toFixed(2)}</b>${isBreach ? (isDrift ? ' · <span style="color:var(--red)">drift detected</span>' : ' · <span style="color:var(--orange)">threshold breach</span>') : ' · nominal'}`;
+
+  if (isDrift) botMsg.classList.add('drifted');
+  else if (isBreach) botMsg.classList.add('breach');
+  botMsg.appendChild(scoreEl);
+
+  $('turnCount').textContent = `Turns: ${distances.length}`;
+  $('vDist').textContent = d.toFixed(3);
+  $('vMean').textContent = phRes.mean.toFixed(3);
+  $('vPH').textContent = phRes.stat.toFixed(2);
+  $('vDrift').textContent = driftedTurns;
+
+  $('stDist').className = 'stat-box' + (isBreach ? ' breach' : '');
+  $('stPH').className = 'stat-box' + (isDrift ? ' alarm' : (phRes.stat > 0.8 ? ' breach' : ''));
+
+  if (isDrift) {
+    updateBadges('alarm', 'drift detected · sustained divergence');
+  } else if (isBreach) {
+    updateBadges('blip', 'threshold breach · single-turn blip');
+  } else {
+    updateBadges('ok', 'status: nominal · tracking baseline');
+  }
+
+  renderChart();
+  isBusy = false;
+}
+
+/* ===== CANVAS CHART RENDERING ===== */
+function renderChart() {
+  const cv = $('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth || 600;
+  const H = 230;
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const padL = 44, padR = 16;
+  const pane = (y0, h, maxVal, title) => ({
+    y0, h, maxVal, title,
+    x: i => padL + (W - padL - padR) * (distances.length < 2 ? 0.5 : i / (distances.length - 1)),
+    y: val => y0 + h - (h * Math.min(val, maxVal) / maxVal)
+  });
+
+  const maxD = Math.max(threshold * 1.5, ...distances, 1.0);
+  const maxPH = Math.max(1.6 * 1.5, ...phStats, 2.5);
+
+  const pDistance = pane(8, 92, maxD, 'Cosine Distance (dt)');
+  const pPH = pane(122, 92, maxPH, 'Page-Hinkley Statistic (Ut - mt)');
+
+  const style = getComputedStyle(document.documentElement);
+  const borderCol = style.getPropertyValue('--border-subtle').trim() || '#2A3241';
+  const textCol = style.getPropertyValue('--text-tertiary').trim() || '#8B949E';
+  const accentCol = style.getPropertyValue('--accent').trim() || '#388BFD';
+  const orangeCol = style.getPropertyValue('--orange').trim() || '#D29922';
+  const redCol = style.getPropertyValue('--red').trim() || '#F85149';
+
+  ctx.font = '10.5px Inter, sans-serif';
+
+  for (const p of [pDistance, pPH]) {
+    ctx.strokeStyle = borderCol;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(padL, p.y0, W - padL - padR, p.h);
+
+    ctx.fillStyle = textCol;
+    ctx.textAlign = 'left';
+    ctx.fillText(p.title, padL + 6, p.y0 + 13);
+    ctx.textAlign = 'right';
+    ctx.fillText(p.maxVal.toFixed(2), padL - 6, p.y0 + 11);
+    ctx.fillText('0.00', padL - 6, p.y0 + p.h);
+  }
+
+  // Draw threshold guidelines
+  const drawGuide = (p, val, col) => {
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(padL, p.y(val));
+    ctx.lineTo(W - padR, p.y(val));
+    ctx.stroke();
+    ctx.restore();
   };
-  autoTimer=setTimeout(step,300);
+
+  drawGuide(pDistance, threshold, orangeCol);
+  drawGuide(pPH, 1.6, redCol);
+
+  // Draw trajectories
+  const drawLine = (p, vals, col) => {
+    if (!vals.length) return;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    vals.forEach((val, i) => {
+      const x = p.x(i), y = p.y(val);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    vals.forEach((val, i) => {
+      ctx.fillStyle = (p === pDistance && val > threshold) ? orangeCol : col;
+      ctx.beginPath();
+      ctx.arc(p.x(i), p.y(val), 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  };
+
+  drawLine(pDistance, distances, accentCol);
+  drawLine(pPH, phStats, redCol);
+
+  if (!distances.length) {
+    ctx.fillStyle = textCol;
+    ctx.textAlign = 'center';
+    ctx.fillText('Send a message or click a preset to start scoring turns', W / 2, pDistance.y0 + pDistance.h / 2 + 5);
+  }
+}
+
+/* ===== EVENT LISTENERS ===== */
+$('send').addEventListener('click', () => {
+  const text = $('inp').value.trim();
+  if (!text || isBusy) return;
+  $('inp').value = '';
+  const toks = tokenize(text);
+  let topic = 'code';
+  if (toks.some(w => TOPIC_VOCAB.recipe.includes(w))) topic = 'recipe';
+  else if (toks.some(w => TOPIC_VOCAB.travel.includes(w))) topic = 'travel';
+  else if (toks.some(w => TOPIC_VOCAB.smalltalk.includes(w))) topic = 'blip';
+  const opts = PRESETS[topic];
+  const reply = opts[Math.floor(Math.random() * opts.length)].a;
+  handleTurn(text, reply);
 });
-$('reset').addEventListener('click',()=>{processTurn.alarmNoted=false;init()});
-window.addEventListener('resize',draw);
-init();
-if(location.hash==='#qa'){$('auto').click()}
+
+$('inp').addEventListener('keydown', e => { if (e.key === 'Enter') $('send').click(); });
+
+document.querySelectorAll('.chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (isBusy) return;
+    const k = btn.dataset.k;
+    const opts = PRESETS[k];
+    const item = opts[Math.floor(Math.random() * opts.length)];
+    handleTurn(item.u, item.a);
+  });
+});
+
+$('auto').addEventListener('click', () => {
+  initSession();
+  $('auto').disabled = true;
+  $('auto').textContent = 'Executing Sequence…';
+  let idx = 0;
+  const runNext = async () => {
+    if (idx >= AUTO_RUN_TURNS.length) {
+      $('auto').disabled = false;
+      $('auto').textContent = '▶ Auto-Run Drift Sequence';
+      autoTimer = null;
+      return;
+    }
+    const item = AUTO_RUN_TURNS[idx++];
+    await handleTurn(item.u, item.a);
+    autoTimer = setTimeout(runNext, 700);
+  };
+  autoTimer = setTimeout(runNext, 200);
+});
+
+$('compact').addEventListener('click', () => {
+  if (isBusy) return;
+  const recentTurns = distances.length ? "Culinary recipes and baking instructions" : "General software engineering";
+  baseCentroid = calculateCentroid([embed(recentTurns)]);
+  phEngine.reset();
+  distances = [];
+  phStats = [];
+  driftedTurns = 0;
+  $('chatlog').innerHTML += `<div class="sysnote">🔄 Context Compacted: Centroid re-seeded on compressed summary. Accumulator reset.</div>`;
+  $('chatlog').scrollTop = $('chatlog').scrollHeight;
+  updateBadges('ok', 'status: nominal · re-baselined on compact summary');
+  renderChart();
+});
+
+$('reset').addEventListener('click', initSession);
+window.addEventListener('resize', renderChart);
+
+initSession();
 </script>
 </body>
 </html>
