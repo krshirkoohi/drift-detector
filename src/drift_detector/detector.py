@@ -93,7 +93,8 @@ class DriftDetector:
         ph_delta: float = 0.005,
         ph_lambda: float = 0.1,
     ):
-        self.baseline = baseline
+        self.initial_baseline: Baseline = baseline
+        self.baseline: Baseline = baseline
         self.provider = provider
         self.metric = metric
         self.use_trend = use_trend
@@ -141,26 +142,31 @@ class DriftDetector:
         self.has_drifted = False
 
     def reset(self) -> None:
-        """Reset turn count, history, and streaming detector state."""
+        """Reset turn count, history, and streaming detector state (preserving baseline anchor)."""
         self.reset_page_hinkley()
         self.turn = 0
         self.history = []
         self.prev_history_len = None
         self.prev_prompt_tokens = None
 
-    def handle_compaction(
+    def rebase(
         self,
-        compacted_summary: Optional[str] = None,
-        new_baseline: Optional[Baseline] = None,
+        new_anchor: Baseline | list[str] | str,
+        reason: str = "explicit_task_transition",
     ) -> str:
-        """Reset detector accumulators and re-seed baseline after chat compaction."""
+        """Explicitly rebase the semantic mission anchor.
+
+        This should ONLY be called on deliberate task changes, user scope transitions,
+        or explicitly validated multi-sample re-baselining events.
+        """
+        from .baseline import BaselineStore
         self.reset_page_hinkley()
         self.turn = 0
 
-        if new_baseline is not None:
-            self.baseline = new_baseline
-        elif compacted_summary and compacted_summary.strip():
-            vecs = l2_normalise(self.provider.embed([compacted_summary.strip()]))
+        if isinstance(new_anchor, Baseline):
+            self.baseline = new_anchor
+        elif isinstance(new_anchor, str):
+            vecs = l2_normalise(self.provider.embed([new_anchor.strip()]))
             centroid = vecs[0]
             self.baseline = Baseline(
                 centroid=centroid,
@@ -168,8 +174,44 @@ class DriftDetector:
                 euclidean_threshold=max(self.baseline.euclidean_threshold, 0.65),
                 n_samples=1,
             )
+        elif isinstance(new_anchor, (list, tuple)):
+            if len(new_anchor) < 3:
+                vecs = l2_normalise(self.provider.embed(list(new_anchor)))
+                centroid = l2_normalise(np.mean(vecs, axis=0, keepdims=True))[0]
+                self.baseline = Baseline(
+                    centroid=centroid,
+                    cosine_threshold=max(self.baseline.cosine_threshold, 0.45),
+                    euclidean_threshold=max(self.baseline.euclidean_threshold, 0.65),
+                    n_samples=len(new_anchor),
+                )
+            else:
+                store = BaselineStore(self.provider)
+                self.baseline = store.build(list(new_anchor))
+        else:
+            raise TypeError(f"Unsupported anchor type: {type(new_anchor)}")
 
-        return "[driftd] Chat compacted: detector reset"
+        return f"[driftd] Semantic mission anchor rebased ({reason})"
+
+    def handle_compaction(
+        self,
+        compacted_summary: Optional[str] = None,
+        rebase_anchor: bool = False,
+    ) -> str:
+        """Reset transient Page-Hinkley accumulators after chat compaction while preserving the mission anchor by default.
+
+        Per V1 Operating Brief:
+        Compaction resets transient trend accumulators and history counters, but preserves
+        the original task/mission anchor centroid by default so gradual drift cannot silently
+        renormalise against recent drifted summaries.
+        """
+        self.reset_page_hinkley()
+        self.turn = 0
+
+        if rebase_anchor and compacted_summary and compacted_summary.strip():
+            self.rebase(compacted_summary.strip(), reason="compaction_rebase_requested")
+            return "[driftd] Chat compacted: accumulators reset · re-baselined on compacted summary"
+
+        return "[driftd] Chat compacted: accumulators reset (mission anchor preserved)"
 
     def score(
         self,

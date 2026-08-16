@@ -175,26 +175,55 @@ def drift_attach_session(
 
 
 @mcp.tool()
-def drift_compact_reset(compacted_summary: str) -> str:
+def drift_compact_reset(compacted_summary: str = "", rebase_anchor: bool = True) -> str:
     """Reset and recalibrate drift baseline following a chat compaction / context summarisation event.
 
     Args:
-        compacted_summary: The new compacted summary of the conversation.
+        compacted_summary: Optional new compacted summary of the conversation.
+        rebase_anchor: Whether to rebase the semantic anchor on the summary (default: True).
     """
     global _detector, _warmup_buffer, _provider, _metric, _use_trend, _enabled
     if not compacted_summary.strip():
+        if _detector is not None:
+            _detector.handle_compaction()
         return "[driftd] Chat compacted: detector reset (session reset without new baseline)."
 
     provider = _ensure_provider()
-    baseline_obj = _build_auto_baseline([compacted_summary])
-    _detector = DriftDetector(
-        baseline=baseline_obj,
-        provider=provider,
-        metric=_metric,
-        use_trend=_use_trend,
-    )
-    _warmup_buffer = [compacted_summary]
-    return f"[driftd] Chat compacted: detector reset · Drift detector re-baselined on compacted summary (~1KB centroid, 0 prior turns)."
+    if _detector is None or rebase_anchor:
+        baseline_obj = _build_auto_baseline([compacted_summary])
+        _detector = DriftDetector(
+            baseline=baseline_obj,
+            provider=provider,
+            metric=_metric,
+            use_trend=_use_trend,
+        )
+        _warmup_buffer = [compacted_summary]
+        return "[driftd] Chat compacted: detector reset · Drift detector re-baselined on compacted summary (~1KB centroid, 0 prior turns)."
+
+    return _detector.handle_compaction(compacted_summary=compacted_summary, rebase_anchor=False)
+
+
+@mcp.tool()
+def drift_rebase(anchor_text: str, reason: str = "explicit_task_transition") -> str:
+    """Explicitly rebase the semantic mission anchor upon an intentional task or scope change.
+
+    Args:
+        anchor_text: The new reference mission description, prompt, or exemplary response.
+        reason: Description of the task change.
+    """
+    global _detector, _provider, _metric, _use_trend
+    provider = _ensure_provider()
+    if _detector is None:
+        baseline_obj = _build_auto_baseline([anchor_text])
+        _detector = DriftDetector(
+            baseline=baseline_obj,
+            provider=provider,
+            metric=_metric,
+            use_trend=_use_trend,
+        )
+        return f"[driftd] Semantic mission anchor initialised ({reason})."
+
+    return _detector.rebase(anchor_text, reason=reason)
 
 
 

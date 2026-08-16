@@ -55,8 +55,9 @@ def test_page_hinkley_reset():
 
 
 def test_detector_explicit_compaction_reset(provider, sample_baseline):
-    """Verify detector handle_compaction resets PH state and returns standard log notice."""
+    """Verify detector handle_compaction resets PH state while preserving the original mission anchor."""
     det = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
+    orig_centroid = np.copy(det.baseline.centroid)
     
     # Cause divergence / drift
     det.score("Distributed consensus Raft log replication.")
@@ -68,10 +69,12 @@ def test_detector_explicit_compaction_reset(provider, sample_baseline):
     
     # Perform compaction reset
     msg = det.handle_compaction()
-    assert "[driftd] Chat compacted: detector reset" in msg
+    assert "[driftd] Chat compacted" in msg
     assert det.ph.statistic == 0.0
     assert det.ph.exceed_streak == 0
     assert det.has_drifted is False
+    # Anchor preserved
+    np.testing.assert_allclose(det.baseline.centroid, orig_centroid)
     
     # Next score should not inherit previous cumulative sum
     score_after = det.score("Raft consensus log replication algorithm.")
@@ -79,18 +82,35 @@ def test_detector_explicit_compaction_reset(provider, sample_baseline):
     assert score_after.compacted_reset is False
 
 
-def test_detector_compaction_with_new_summary(provider, sample_baseline):
-    """Verify detector re-seeds centroid when compacted summary is provided."""
+def test_detector_compaction_preserves_anchor_default(provider, sample_baseline):
+    """Verify detector preserves mission anchor by default even when summary is present."""
+    det = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
+    orig_centroid = np.copy(det.baseline.centroid)
+    
+    summary = "Building frontend UI components and React styling with Tailwind CSS."
+    msg = det.handle_compaction(compacted_summary=summary, rebase_anchor=False)
+    assert "[driftd] Chat compacted" in msg
+    assert "anchor preserved" in msg
+    
+    # Mission anchor is preserved
+    np.testing.assert_allclose(det.baseline.centroid, orig_centroid)
+    
+    # Off-topic turn still scores far from original mission centroid
+    ui_score = det.score("Building frontend UI components and React styling.")
+    assert ui_score.cosine_distance > 0.40
+
+
+def test_detector_rebase_explicit(provider, sample_baseline):
+    """Verify detector re-seeds centroid when rebase() is explicitly invoked."""
     det = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
     
-    # Original topic is distributed systems. Compaction introduces new topic: Frontend React UI
     summary = "Building frontend UI components and React styling with Tailwind CSS."
-    msg = det.handle_compaction(compacted_summary=summary)
-    assert "[driftd] Chat compacted: detector reset" in msg
+    msg = det.rebase(summary, reason="explicit_ui_task_switch")
+    assert "rebased" in msg
     
     # Now frontend UI responses should be nominal against the new centroid
     ui_score = det.score("Building frontend UI components and React styling.")
-    assert ui_score.cosine_distance < 0.35
+    assert ui_score.cosine_distance < 0.20
     assert ui_score.drifted is False
 
 
@@ -140,11 +160,11 @@ def test_core_api_compaction_methods(provider):
     detector.score("Off-topic cooking conversation.")
     
     # Compaction reset via wrapper
-    msg = detector.handle_compaction(compacted_summary="Distributed key-value storage engine implementation.")
-    assert "[driftd] Chat compacted: detector reset" in msg
+    msg = detector.handle_compaction(compacted_summary="Distributed key-value storage engine implementation.", rebase_anchor=True)
+    assert "[driftd] Chat compacted" in msg
     
     score = detector.score("Distributed key-value storage engine implementation.", history_len=2)
-    assert score.cosine_distance < 0.1
+    assert score.cosine_distance < 0.2
     assert score.drifted is False
 
 
@@ -168,8 +188,8 @@ def test_session_compaction_handling(provider):
     detector.score("Gardening tips for springtime flowers.")
     detector.score("Planting tomatoes and organic fertilizer.")
     
-    # Compaction
-    detector.handle_compaction(compacted_summary="The topic is now focused on microservice containerisation with Docker.")
+    # Compaction with rebase
+    detector.handle_compaction(compacted_summary="The topic is now focused on microservice containerisation with Docker.", rebase_anchor=True)
     assert detector.ph.cum == 0.0
     assert detector.ph.mean == 0.0
     assert detector.has_drifted is False
