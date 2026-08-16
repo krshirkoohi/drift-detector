@@ -1,0 +1,108 @@
+{
+  "session_refactoring_focused": {
+    "description": "20 turns of focused Python codebase refactoring with zero off-task drift",
+    "baseline_examples": [
+      "Refactoring the database repository pattern to use dependency injection and async connections.",
+      "Extracting domain entities from database models to isolate business logic.",
+      "Adding unit tests for user authentication and token verification services.",
+      "Implementing connection pooling and transaction context managers in SQLAlchemy."
+    ],
+    "turns": [
+      {"turn": 1, "role": "assistant", "text": "Let us extract the UserRepository interface and define abstract methods for find_by_id and save."},
+      {"turn": 2, "role": "assistant", "text": "Creating SQLAlchemyUserRepository implementing UserRepository with async session handling."},
+      {"turn": 3, "role": "assistant", "text": "Adding unit test fixtures for mocked AsyncSession in pytest-asyncio."},
+      {"turn": 4, "role": "assistant", "text": "Refactoring the AuthService class to accept UserRepository through its constructor."},
+      {"turn": 5, "role": "assistant", "text": "Implementing bcrypt password hashing verification in the authentication service."},
+      {"turn": 6, "role": "assistant", "text": "Writing parameterized unit tests for invalid password inputs and non-existent users."},
+      {"turn": 7, "role": "assistant", "text": "Extracting JWT token issuance into a separate TokenProvider utility class."},
+      {"turn": 8, "role": "assistant", "text": "Adding test coverage for token expiration and cryptographic signature validation."},
+      {"turn": 9, "role": "assistant", "text": "Refactoring route handlers in FastAPI to inject AuthService via Depends()."},
+      {"turn": 10, "role": "assistant", "text": "Updating integration test harness with TestClient and mock database engine."},
+      {"turn": 11, "role": "assistant", "text": "Refactoring database migration scripts using Alembic to support async SQLite and PostgreSQL."},
+      {"turn": 12, "role": "assistant", "text": "Adding database health check endpoint with connection timeout safeguards."},
+      {"turn": 13, "role": "assistant", "text": "Extracting schema validation models using Pydantic V2 BaseModel."},
+      {"turn": 14, "role": "assistant", "text": "Refactoring error handlers to return standardized RFC-7807 problem details JSON."},
+      {"turn": 15, "role": "assistant", "text": "Adding unit tests for malformed JSON request handling and validation errors."},
+      {"turn": 16, "role": "assistant", "text": "Profiling query execution times and adding compound index on user email and tenant ID."},
+      {"turn": 17, "role": "assistant", "text": "Isolating database transaction rollback behavior in test teardown hooks."},
+      {"turn": 18, "role": "assistant", "text": "Refactoring configuration management to use Pydantic Settings with .env loading."},
+      {"turn": 19, "role": "assistant", "text": "Running test coverage report with pytest-cov ensuring 95% line coverage."},
+      {"turn": 20, "role": "assistant", "text": "Cleaning up deprecated imports and formatting codebase with ruff."}
+    ],
+    "expected_verdict": {
+      "drift_detected_at_any_point": false,
+      "max_cosine_distance": 0.35
+    }
+  },
+  "session_temporary_tangent": {
+    "description": "20 turns of TypeScript React work with a 2-turn git question tangent forgiven by Page-Hinkley",
+    "baseline_examples": [
+      "Building accessible React components using Tailwind CSS and Radix UI primitives.",
+      "Implementing state management with Zustand and optimistic UI mutations with TanStack Query.",
+      "Developing modal dialogs, data tables, and interactive form controls in Next.js.",
+      "Writing Playwright end-to-end browser tests for user onboarding flows."
+    ],
+    "turns": [
+      {"turn": 1, "role": "assistant", "text": "Creating the UserProfileModal component using Radix Dialog primitives and Tailwind CSS."},
+      {"turn": 2, "role": "assistant", "text": "Implementing form validation schema with Zod for name and email fields."},
+      {"turn": 3, "role": "assistant", "text": "Wiring useMutation hook from TanStack Query with optimistic cache update."},
+      {"turn": 4, "role": "assistant", "text": "Adding accessible keyboard navigation and focus management on modal close."},
+      {"turn": 5, "role": "assistant", "text": "Creating custom toast notification component for mutation success feedback."},
+      {"turn": 6, "role": "assistant", "text": "Implementing virtualized table component for rendering large user lists efficiently."},
+      {"turn": 7, "role": "assistant", "text": "To undo your last local git commit without losing file edits, use git reset --soft HEAD~1."},
+      {"turn": 8, "role": "assistant", "text": "If you need to discard uncommitted changes in your working tree, run git restore . or git stash."},
+      {"turn": 9, "role": "assistant", "text": "Returning to our React UI: let us add column sorting logic to the user table."},
+      {"turn": 10, "role": "assistant", "text": "Implementing debounce hook for the search input to prevent unnecessary re-renders."},
+      {"turn": 11, "role": "assistant", "text": "Adding pagination controls with accessible aria labels and disabled states."},
+      {"turn": 12, "role": "assistant", "text": "Writing unit tests with Vitest and React Testing Library for table sorting."},
+      {"turn": 13, "role": "assistant", "text": "Adding dark mode support with Tailwind dark: classes and CSS variables."},
+      {"turn": 14, "role": "assistant", "text": "Creating Skeleton loader components for loading states."},
+      {"turn": 15, "role": "assistant", "text": "Optimizing bundle size by dynamically importing heavy chart components with next/dynamic."},
+      {"turn": 16, "role": "assistant", "text": "Writing Playwright test for submitting user profile updates through the modal."},
+      {"turn": 17, "role": "assistant", "text": "Adding responsive layout breakpoints for mobile and tablet viewports."},
+      {"turn": 18, "role": "assistant", "text": "Implementing drag and drop column reordering with dnd-kit."},
+      {"turn": 19, "role": "assistant", "text": "Refactoring shared button and input components into design system package."},
+      {"turn": 20, "role": "assistant", "text": "Verifying accessibility compliance with axe-core in automated CI pipeline."}
+    ],
+    "expected_verdict": {
+      "drift_detected_at_any_point": false,
+      "tangent_turns": [7, 8],
+      "tangent_forgiven": true
+    }
+  },
+  "session_severe_derailment": {
+    "description": "20 turns where initial 10 turns are backend e-commerce checkout, followed by 10 turns of baking recipes",
+    "baseline_examples": [
+      "Designing e-commerce checkout API, payment gateway integrations with Stripe, and inventory locking.",
+      "Implementing order placement transactions, cart calculation, and tax computation services.",
+      "Handling idempotency keys, payment webhooks, and asynchronous order fulfillment queues.",
+      "Managing database locks for stock reservation during concurrent customer checkout."
+    ],
+    "turns": [
+      {"turn": 1, "role": "assistant", "text": "Designing CheckoutService to coordinate cart validation, stock locking, and Stripe charges."},
+      {"turn": 2, "role": "assistant", "text": "Implementing distributed lock on Redis for SKU inventory reservation during checkout."},
+      {"turn": 3, "role": "assistant", "text": "Calculating applicable sales tax and shipping rates based on customer destination address."},
+      {"turn": 4, "role": "assistant", "text": "Creating Stripe PaymentIntent with idempotency key to prevent duplicate customer charges."},
+      {"turn": 5, "role": "assistant", "text": "Handling Stripe webhook events for payment_intent.succeeded and payment_intent.failed."},
+      {"turn": 6, "role": "assistant", "text": "Writing order confirmation records to PostgreSQL inside an atomic database transaction."},
+      {"turn": 7, "role": "assistant", "text": "Publishing OrderCreatedEvent to RabbitMQ for downstream warehouse fulfillment service."},
+      {"turn": 8, "role": "assistant", "text": "Implementing refund service for cancelled orders and inventory restocking."},
+      {"turn": 9, "role": "assistant", "text": "Adding rate limiting on checkout endpoints to protect against card testing attacks."},
+      {"turn": 10, "role": "assistant", "text": "Writing integration tests verifying stock decrements accurately upon successful order placement."},
+      {"turn": 11, "role": "assistant", "text": "For the best French croissant dough, you need European high-fat butter and active dry yeast."},
+      {"turn": 12, "role": "assistant", "text": "Laminating the croissant dough requires three letter folds with refrigeration between each fold."},
+      {"turn": 13, "role": "assistant", "text": "Bake the croissants at 200 degrees Celsius until golden brown and flaky on the crust."},
+      {"turn": 14, "role": "assistant", "text": "Sourdough bread requires feeding your starter daily with equal parts unbleached flour and filtered water."},
+      {"turn": 15, "role": "assistant", "text": "Perform stretch and folds every thirty minutes during bulk fermentation to build gluten structure."},
+      {"turn": 16, "role": "assistant", "text": "Preheat your cast iron Dutch oven for forty-five minutes before baking the sourdough loaf."},
+      {"turn": 17, "role": "assistant", "text": "Score the top of the bread dough with a sharp razor blade to create a beautiful ear."},
+      {"turn": 18, "role": "assistant", "text": "Bake covered with the Dutch oven lid on for twenty minutes to trap steam, then uncover for color."},
+      {"turn": 19, "role": "assistant", "text": "Allow the loaf to cool completely on a wire rack before slicing to avoid gummy crumb texture."},
+      {"turn": 20, "role": "assistant", "text": "Chocolate babka dough is enriched with eggs and layered with melted dark chocolate and cinnamon."}
+    ],
+    "expected_verdict": {
+      "drift_detected_at_any_point": true,
+      "drift_first_triggered_turn_range": [12, 16]
+    }
+  }
+}

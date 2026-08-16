@@ -15,19 +15,6 @@ from drift_detector.mcp_server import (
 )
 
 
-@pytest.fixture
-def provider():
-    return DeterministicProvider(dim=32)
-
-
-@pytest.fixture
-def sample_baseline(provider):
-    texts = [
-        "Distributed database replication and consensus protocols like Raft and Paxos.",
-        "High-performance caching mechanisms, memory indexing, and horizontal sharding.",
-        "Leader election algorithms, Byzantine fault tolerance, and log replication.",
-    ]
-    return BaselineStore(provider).build(texts)
 
 
 def test_page_hinkley_reset():
@@ -191,7 +178,7 @@ def test_session_compaction_handling(provider):
     # Compaction with rebase
     detector.handle_compaction(compacted_summary="The topic is now focused on microservice containerisation with Docker.", rebase_anchor=True)
     assert detector.ph.cum == 0.0
-    assert detector.ph.mean == 0.0
+    assert detector.ph.statistic == 0.0
     assert detector.has_drifted is False
     
     verdict = detector.score("Building container images and running Docker containers.")

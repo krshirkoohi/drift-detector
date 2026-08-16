@@ -21,23 +21,36 @@ class PageHinkley:
     resets the streak and is forgiven.
     """
 
-    def __init__(self, delta: float = 0.005, lam: float = 0.1, burn_in: int = 3, sustain: int = 2):
+    def __init__(
+        self,
+        delta: float = 0.005,
+        lam: float = 0.1,
+        burn_in: int = 2,
+        sustain: int = 3,
+        nominal_mean: Optional[float] = None,
+    ):
         self.delta, self.lam, self.burn_in, self.sustain = delta, lam, burn_in, sustain
+        self.nominal_mean = nominal_mean
         self.reset()
 
     def reset(self) -> None:
         self.n = 0
-        self.mean = 0.0
+        self.mean = self.nominal_mean if self.nominal_mean is not None else 0.0
         self.cum = 0.0
         self.cum_min = 0.0
         self.exceed_streak = 0
 
-    def update(self, x: float) -> bool:
+    def update(self, x: float, threshold: Optional[float] = None) -> bool:
         self.n += 1
-        self.mean += (x - self.mean) / self.n
-        self.cum += x - self.mean - self.delta
+        if self.nominal_mean is None:
+            self.mean += (x - self.mean) / self.n
+        ref_mean = self.nominal_mean if self.nominal_mean is not None else self.mean
+        self.cum += x - ref_mean - self.delta
         self.cum_min = min(self.cum_min, self.cum)
-        elevated = self.statistic > self.lam and x > self.mean
+        if threshold is not None:
+            elevated = (x > threshold) and (self.statistic > self.lam or x > ref_mean)
+        else:
+            elevated = self.statistic > self.lam and x > ref_mean
         self.exceed_streak = self.exceed_streak + 1 if elevated else 0
         return self.n > self.burn_in and self.exceed_streak >= self.sustain
 
@@ -105,7 +118,18 @@ class DriftDetector:
         self.use_trend = use_trend
         self.ph_delta = ph_delta
         self.ph_lambda = ph_lambda
-        self.ph = PageHinkley(delta=ph_delta, lam=ph_lambda)
+        nom_mean = (
+            getattr(baseline, "mean_cosine_distance", None)
+            if metric == "cosine"
+            else getattr(baseline, "mean_euclidean_distance", None)
+        )
+        self.ph = PageHinkley(
+            delta=ph_delta,
+            lam=ph_lambda,
+            burn_in=2,
+            sustain=3,
+            nominal_mean=nom_mean,
+        )
         self.turn = 0
         self.history: list[TurnScore] = []
         self.prev_history_len: Optional[int] = None
@@ -267,7 +291,7 @@ class DriftDetector:
         else:
             d, thr = euc, self.baseline.euclidean_threshold
         breach = d > thr
-        alarm = self.ph.update(d) if self.use_trend else False
+        alarm = self.ph.update(d, threshold=thr) if self.use_trend else False
         drifted = alarm if self.use_trend else breach
         if drifted:
             self.has_drifted = True

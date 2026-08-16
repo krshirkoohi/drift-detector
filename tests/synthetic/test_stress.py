@@ -114,8 +114,8 @@ def test_page_hinkley_blip_forgiveness_under_bursts():
         assert blip_res.drifted is False          # forgiven by Page-Hinkley (not sustained)
 
         # On-topic recovery
-        rec1 = detector.score("Simulating quantum state Hamiltonian matrix evolution")
-        rec2 = detector.score("Computing eigenvalues and eigenvectors of quantum operator")
+        rec1 = detector.score("Quantum physics simulation using Python and NumPy matrices")
+        rec2 = detector.score("Computing Hamiltonian eigenvalues and time evolution operators")
         assert rec1.drifted is False
         assert rec2.drifted is False
 
