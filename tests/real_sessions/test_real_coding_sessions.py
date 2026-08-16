@@ -114,3 +114,39 @@ def test_real_session_severe_derailment_triggers_drift(real_neural_provider):
     summary = detector.summary()
     assert summary["has_drifted"] is True
     assert summary["drifted_turns"] >= 4
+
+
+def test_cloud_openai_compatible_live_embeddings():
+    """Verify DriftDetector against live cloud embedding API when credentials are present."""
+    import os
+    from pathlib import Path
+    from drift_detector.embedding import OpenAICompatibleProvider
+
+    env_file = Path("~/.gemini/secrets.env").expanduser()
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if line.startswith("export OPEN_ROUTER="):
+                key = line[19:].strip("\"'")
+                os.environ["OPEN_ROUTER"] = key
+
+    api_key = os.environ.get("OPEN_ROUTER") or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        pytest.skip("No cloud embedding API key found in environment or secrets.env")
+
+    base_url = "https://openrouter.ai/api/v1" if "OPEN_ROUTER" in os.environ else "https://api.openai.com/v1"
+    model = "openai/text-embedding-3-small" if "OPEN_ROUTER" in os.environ else "text-embedding-3-small"
+
+    provider = OpenAICompatibleProvider(base_url=base_url, model=model, api_key=api_key)
+
+    data = load_fixtures()["session_severe_derailment"]
+    detector = DriftDetector.from_examples(
+        baseline_texts=data["baseline_examples"],
+        provider=provider,
+        metric="cosine",
+        use_trend=True,
+    )
+
+    # Initial 5 on-topic turns must be nominal
+    for turn in data["turns"][:5]:
+        score = detector.score(turn["text"])
+        assert score.drifted is False

@@ -51,9 +51,13 @@ class BaselineStore:
         raw_euc = float(np.percentile(euc, percentile))
 
         # Apply small-sample safety floors to prevent overfitting when sample count N < 10
-        is_neural = getattr(self.provider, "model_name", None) is not None
-        eff_floor_cos = 0.85 if is_neural else 0.45
-        eff_floor_euc = 1.20 if is_neural else 0.65
+        is_neural = getattr(self.provider, "model_name", None) is not None or getattr(self.provider, "model", None) is not None
+        if getattr(self.provider, "model_name", None) is not None:
+            eff_floor_cos, eff_floor_euc = 0.85, 1.20
+        elif is_neural:
+            eff_floor_cos, eff_floor_euc = 0.70, 1.00
+        else:
+            eff_floor_cos, eff_floor_euc = 0.45, 0.65
 
         if len(texts) < 10:
             cos_threshold = max(raw_cos, eff_floor_cos)
