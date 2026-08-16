@@ -4,7 +4,7 @@
 
 One-off tangents are forgiven as transient blips. Sustained divergence is flagged.
 
-[![Interactive Demo](https://img.shields.io/badge/Demo-Live_Simulator-blue)](https://krshirkoohi.github.io/drift-detector/) [![Tests](https://img.shields.io/badge/Tests-31%2F31_Passing-brightgreen)](tests/) [![Architecture](https://img.shields.io/badge/MCP-FastMCP_Ready-purple)](src/drift_detector/mcp_server.py)
+[![Interactive Demo](https://img.shields.io/badge/Demo-Live_Simulator-blue)](https://krshirkoohi.github.io/drift-detector/) [![Tests](https://img.shields.io/badge/Tests-32%2F32_Passing-brightgreen)](tests/) [![Architecture](https://img.shields.io/badge/MCP-FastMCP_Ready-purple)](src/drift_detector/mcp_server.py)
 
 ---
 
@@ -32,9 +32,9 @@ One-off tangents are forgiven as transient blips. Sustained divergence is flagge
    * `openai`: Hosted OpenAI / Ollama compatible embedding API.
    * `test` / `deterministic`: Offline hash projection for fast CI and math invariant validation.
 3. **Decoupled Anchor & Compaction Lifecycle:** When context compaction occurs, transient Page-Hinkley trend accumulators are reset while **preserving the original mission anchor** by default to prevent accumulated drift from silently renormalising. Explicit `rebase()` allows intentional task transitions.
-4. **Explicit Calibration Confidence:** Sessions transition through explicit lifecycle states (`calibrating` vs `monitoring`) with confidence grades (`low`, `moderate`, `high`) based on baseline sample population.
+4. **Explicit Baseline Sample Support:** Sessions report lifecycle state (`calibrating` vs `monitoring`) and sample support level (`calibration_support: low | moderate | high`) based on baseline sample count.
 5. **Homogeneous Transformation:** Standardised on assistant response embeddings across both calibration and live evaluation.
-6. **Tri-Partite Validated:** Segregated test suites across `tests/unit/` (invariants), `tests/synthetic/` (10k stress & microbenchmarks), and `tests/real_sessions/` (multi-turn real developer transcripts).
+6. **Tri-Partite Test Suite:** Segregated test suites across `tests/unit/` (invariants & core math), `tests/synthetic/` (10k stress & numerical stability), and `tests/scenarios/` (curated development scenarios).
 
 ---
 
@@ -66,7 +66,7 @@ Add `drift-detector` to your MCP client configuration (e.g. `claude_desktop_conf
 * `drift_evaluate_turn(agent_response, ...)` — Evaluate an agent turn in background.
 * `drift_compact_reset(compacted_summary, ...)` — Reset Page-Hinkley accumulators on context compaction.
 * `drift_rebase(anchor_text, ...)` — Explicitly rebase mission centroid upon intentional task change.
-* `drift_get_status()` — View session metrics, lifecycle state (`calibrating`/`monitoring`), and confidence.
+* `drift_get_status()` — View session metrics, lifecycle state (`calibrating`/`monitoring`), and sample support.
 * `drift_toggle(mode)` — Toggle background monitoring `on`, `off`, `status`, or `reset`.
 
 ---
@@ -113,8 +113,6 @@ print(detector.summary())
 
 ## Latency, Microbenchmarks & Performance Boundaries
 
-Performance characteristics across different operational tiers:
-
 ### 1. Execution Profiles & Model Latencies
 
 | Evaluation Layer | Technology / Implementation | Turn Latency | Cost per 10k Turns | Memory Footprint |
@@ -124,19 +122,19 @@ Performance characteristics across different operational tiers:
 | **Hosted Neural Embedding** | Google Gemini / OpenAI Embeddings API | **~100 – 250 ms** (Network) | ~$0.002 USD | ~3.0 KB centroid |
 | **LLM-as-a-Judge (Scenario Model)** | Secondary Frontier LLM Prompt Evaluator | **~600 – 900 ms** (Network) | ~$2.85 USD | Entire conversation context buffer |
 
-> *Note: Vector scoring ($19\ \mu\text{s}$) measures isolated mathematical distance computation. End-to-end latency in production includes embedding generation ($5\text{ ms}$ local or network API latency). LLM-as-a-judge latency and cost figures are modelled scenario assumptions based on typical frontier LLM pricing (~1,500 prompt tokens / 100 output tokens).*
+> *Note: Vector scoring ($19\ \mu\text{s}$) measures isolated mathematical distance computation on pre-computed embeddings. End-to-end latency includes embedding model inference ($5\text{ ms}$ local or network API latency). LLM-as-a-judge latency and cost figures are modelled scenario assumptions based on typical frontier LLM pricing (~1,500 prompt tokens / 100 output tokens).*
 
-### 2. Detection Reliability & Empirical Validation
+### 2. Development Status & Validation Roadmap
 
-Validated across 31 automated test cases in `tests/`:
-
-| Dimension | Scenario | Measured Result |
+| Dimension | Scope / Evaluation Method | Status |
 |---|---|---|
-| **Neural Blip Forgiveness (FPR)** | 30 isolated single-turn tangents (`all-MiniLM`) | **0.0% false alarms** (100% blip forgiveness) |
-| **Neural Sustained Drift (TPR)** | 30 multi-turn off-topic sequences (`all-MiniLM`) | **100.0% true positive detection** (lag = 3 turns) |
-| **Real AI Coding Transcripts** | 20-turn refactoring, tangent, and baking drift | **100% accurate classification** on real transcripts |
-| **Compaction Recovery** | 100 consecutive context compactions | **100% mathematical & numerical stability** |
-| **Stress Throughput** | 10,000 streaming evaluation turns | **> 50,000 turns/second** (zero memory leak) |
+| **Local PyTorch Transformer Integration** | `sentence-transformers/all-MiniLM-L6-v2` and `roberta-base` | **Verified** (Offline neural inference, $5\text{ ms}$ latency) |
+| **Cloud Embedding Provider Integration** | `OpenAICompatibleProvider` via `/v1/embeddings` endpoint | **Verified** (Plumbing & live API vector retrieval) |
+| **Curated Development Scenarios (`candidate_v1`)** | Constructed 20-turn refactoring, tangent, and baking scenarios | **Verified** (Nominal stability, blip suppression, and sustained alarm) |
+| **Stress & Numerical Stability** | 10,000 turns and 100 compaction cycles | **Verified** (> 50,000 turns/sec, zero drift leakage) |
+| **Held-Out Real Transcript Benchmark** | Independent, un-tuned real developer sessions | **Planned** (Pending independent collection and labelling) |
+
+> **Evaluation Note:** Current test fixtures (`tests/scenarios/fixtures/curated_scenarios.json`) are hand-crafted development scenarios used for exploratory baseline development and candidate parameter selection (`candidate_v1`). Formal false-alarm and recall metrics on natural, independently labelled developer transcripts will be evaluated on a locked, held-out corpus in future benchmarks.
 
 ---
 

@@ -1,20 +1,23 @@
-"""Real-world multi-turn AI coding session validation test suite.
+"""Curated development scenario test suite.
 
-Validates detector accuracy against genuine multi-turn development transcripts:
-1. Focused Refactoring: 20 turns on-task, zero drift alerts.
-2. Transient Detour: 20 turns on-task with 2-turn tangent, forgiven by Page-Hinkley.
-3. Severe Derailment: 10 turns on-task followed by 10 turns of baking recipes, sustained drift alarm triggered.
+Note: These are hand-crafted development fixtures used for baseline validation
+and candidate parameter exploration (candidate_v1), NOT held-out real-world transcripts.
+
+Scenarios:
+1. Focused Refactoring: 20 turns on-task development scenario.
+2. Transient Detour: 20 turns on-task with a 2-turn git command tangent.
+3. Severe Derailment: 10 turns on-task followed by 10 turns of French baking recipes.
 """
 import json
 from pathlib import Path
 import pytest
 
 from drift_detector.core import DriftDetector, DriftResult
-from drift_detector.embedding import LocalTransformerProvider, DeterministicProvider
+from drift_detector.embedding import LocalTransformerProvider
 
 
 def load_fixtures():
-    fixture_path = Path(__file__).parent / "fixtures" / "coding_sessions.json"
+    fixture_path = Path(__file__).parent / "fixtures" / "curated_scenarios.json"
     with open(fixture_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -25,8 +28,8 @@ def real_neural_provider():
     return LocalTransformerProvider(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 
-def test_real_session_focused_refactoring_never_drifts(real_neural_provider):
-    """Verify 20-turn focused refactoring session stays nominal with zero false alarms."""
+def test_curated_session_focused_refactoring_stays_nominal(real_neural_provider):
+    """Verify 20-turn focused refactoring development scenario stays nominal."""
     data = load_fixtures()["session_refactoring_focused"]
     baseline_texts = data["baseline_examples"]
     turns = data["turns"]
@@ -42,17 +45,17 @@ def test_real_session_focused_refactoring_never_drifts(real_neural_provider):
     for turn in turns:
         res = detector.score(turn["text"])
         results.append(res)
-        assert res.drifted is False, f"False positive drift alert on focused turn {turn['turn']}"
+        assert res.drifted is False, f"Unexpected drift alert on focused turn {turn['turn']}"
 
     summary = detector.summary()
     assert summary["turns"] == 20
     assert summary["drifted_turns"] == 0
     assert summary["has_drifted"] is False
-    assert summary["confidence"] in ["moderate", "high"]
+    assert summary["calibration_support"] in ["moderate", "high"]
 
 
-def test_real_session_temporary_tangent_is_forgiven(real_neural_provider):
-    """Verify a 2-turn tangential query (git command syntax) is forgiven by Page-Hinkley."""
+def test_curated_session_temporary_tangent_is_forgiven(real_neural_provider):
+    """Verify a 2-turn tangential query (git command syntax) is forgiven by Page-Hinkley in scenario."""
     data = load_fixtures()["session_temporary_tangent"]
     baseline_texts = data["baseline_examples"]
     turns = data["turns"]
@@ -74,15 +77,15 @@ def test_real_session_temporary_tangent_is_forgiven(real_neural_provider):
     assert results[6].drifted is False  # Turn 7
     assert results[7].drifted is False  # Turn 8
 
-    # Final summary should show zero sustained drift across the session
+    # Final summary should show zero sustained drift across the scenario
     summary = detector.summary()
     assert summary["turns"] == 20
     assert summary["drifted_turns"] == 0
     assert summary["has_drifted"] is False
 
 
-def test_real_session_severe_derailment_triggers_drift(real_neural_provider):
-    """Verify sustained off-topic tangent (French baking recipes) triggers drift alert."""
+def test_curated_session_severe_derailment_triggers_drift(real_neural_provider):
+    """Verify sustained off-topic tangent (French baking recipes) triggers drift alert in scenario."""
     data = load_fixtures()["session_severe_derailment"]
     baseline_texts = data["baseline_examples"]
     turns = data["turns"]
@@ -105,7 +108,7 @@ def test_real_session_severe_derailment_triggers_drift(real_neural_provider):
 
     # Initial 10 turns on e-commerce checkout should be nominal
     for i in range(10):
-        assert results[i].drifted is False, f"False drift on initial on-topic turn {i+1}"
+        assert results[i].drifted is False, f"Unexpected drift on initial on-topic turn {i+1}"
 
     # Sustained baking turns should trigger drift alert
     assert drift_first_detected_turn is not None, "Failed to detect severe derailment"
@@ -117,7 +120,10 @@ def test_real_session_severe_derailment_triggers_drift(real_neural_provider):
 
 
 def test_cloud_openai_compatible_live_embeddings():
-    """Verify DriftDetector against live cloud embedding API when credentials are present."""
+    """Verify DriftDetector against live cloud embedding API across the severe derailment trajectory.
+
+    Note: Tests cloud provider plumbing and trajectory evaluation when credentials are present.
+    """
     import os
     from pathlib import Path
     from drift_detector.embedding import OpenAICompatibleProvider
@@ -146,7 +152,21 @@ def test_cloud_openai_compatible_live_embeddings():
         use_trend=True,
     )
 
-    # Initial 5 on-topic turns must be nominal
-    for turn in data["turns"][:5]:
-        score = detector.score(turn["text"])
-        assert score.drifted is False
+    results: list[DriftResult] = []
+    first_drift = None
+    for turn in data["turns"]:
+        res = detector.score(turn["text"])
+        results.append(res)
+        if res.drifted and first_drift is None:
+            first_drift = turn["turn"]
+
+    # Initial on-topic turns stay nominal
+    for i in range(10):
+        assert results[i].drifted is False, f"Cloud false alarm on on-topic turn {i+1}"
+
+    # Baking derailment triggers drift
+    assert first_drift is not None, "Cloud provider failed to trigger on sustained derailment"
+    assert first_drift >= 11
+
+    summary = detector.summary()
+    assert summary["has_drifted"] is True

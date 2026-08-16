@@ -89,41 +89,47 @@ def test_local_transformer_provider_fail_fast():
         provider.embed(["Some test text"])
 
 
-def test_calibration_confidence_and_lifecycle_states():
+def test_calibration_support_and_lifecycle_states():
     provider = DeterministicProvider(dim=16)
     
-    # 1. High confidence (>=10 samples)
+    # 1. High sample support (>=10 samples)
     high_samples = [f"Sample sentence {i} discussing distributed systems." for i in range(12)]
     det_high = DriftDetector.from_examples(high_samples, provider=provider)
     assert det_high.is_calibrated is True
+    assert det_high.calibration_support == "high"
     assert det_high.confidence == "high"
     assert det_high.lifecycle_state == "monitoring"
     
     score_high = det_high.score("Valid distributed consensus message.")
     assert score_high.calibrated is True
+    assert score_high.calibration_support == "high"
     assert score_high.confidence == "high"
     assert score_high.lifecycle_state == "monitoring"
     
     summary_high = det_high.summary()
     assert summary_high["calibrated"] is True
+    assert summary_high["calibration_support"] == "high"
     assert summary_high["confidence"] == "high"
     assert summary_high["lifecycle_state"] == "monitoring"
     
-    # 2. Moderate confidence (3-9 samples)
+    # 2. Moderate sample support (3-9 samples)
     mod_samples = [f"Sample sentence {i} on caching." for i in range(4)]
     det_mod = DriftDetector.from_examples(mod_samples, provider=provider)
     assert det_mod.is_calibrated is True
+    assert det_mod.calibration_support == "moderate"
     assert det_mod.confidence == "moderate"
     assert det_mod.lifecycle_state == "monitoring"
     
-    # 3. Low confidence (dynamic single summary / <3 samples)
+    # 3. Low sample support (dynamic single summary / <3 samples)
     det_mod.rebase("Single summary sentence.", reason="test_single_summary")
     assert det_mod.is_calibrated is False
+    assert det_mod.calibration_support == "low"
     assert det_mod.confidence == "low"
     assert det_mod.lifecycle_state == "calibrating"
     
     score_low = det_mod.score("Off topic turn.")
     assert score_low.calibrated is False
+    assert score_low.calibration_support == "low"
     assert score_low.confidence == "low"
     assert score_low.lifecycle_state == "calibrating"
     assert score_low.badge == "calibrating"

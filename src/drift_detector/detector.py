@@ -70,8 +70,13 @@ class TurnScore:
     compacted_reset: bool = False
     notice: Optional[str] = None
     calibrated: bool = True
-    confidence: str = "moderate"
+    calibration_support: str = "moderate"
     lifecycle_state: str = "monitoring"
+
+    @property
+    def confidence(self) -> str:
+        """Backwards-compatible alias for calibration_support (reflects baseline sample support, not probability)."""
+        return self.calibration_support
 
     @property
     def badge(self) -> str:
@@ -86,6 +91,7 @@ class TurnScore:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["badge"] = self.badge
+        d["confidence"] = self.calibration_support
         return d
 
 
@@ -305,7 +311,7 @@ class DriftDetector:
             compacted_reset=compacted_reset,
             notice=notice,
             calibrated=self.is_calibrated,
-            confidence=self.confidence,
+            calibration_support=self.calibration_support,
             lifecycle_state=self.lifecycle_state,
         )
         self.history.append(ts)
@@ -313,18 +319,26 @@ class DriftDetector:
 
     @property
     def is_calibrated(self) -> bool:
-        """True if baseline contains sufficient statistical samples (>=3)."""
+        """True if baseline contains sufficient sample support (>=3)."""
         return getattr(self.baseline, "n_samples", 1) >= 3
 
     @property
-    def confidence(self) -> str:
-        """Confidence grade based on baseline sample population."""
+    def calibration_support(self) -> str:
+        """Baseline sample support level ('low' for N<3, 'moderate' for 3<=N<10, 'high' for N>=10).
+
+        Note: This reflects baseline sample count support, NOT a probabilistic confidence score.
+        """
         n = getattr(self.baseline, "n_samples", 1)
         if n >= 10:
             return "high"
         if n >= 3:
             return "moderate"
         return "low"
+
+    @property
+    def confidence(self) -> str:
+        """Backwards-compatible alias for calibration_support."""
+        return self.calibration_support
 
     @property
     def lifecycle_state(self) -> str:
@@ -362,7 +376,8 @@ class DriftDetector:
             "compacted_reset": score.compacted_reset,
             "notice": score.notice,
             "calibrated": score.calibrated,
-            "confidence": score.confidence,
+            "calibration_support": score.calibration_support,
+            "confidence": score.calibration_support,
             "lifecycle_state": score.lifecycle_state,
             "latency_ms": round(latency, 2),
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -388,7 +403,8 @@ class DriftDetector:
             "trend_rule": self.use_trend,
             "has_drifted": self.has_drifted,
             "calibrated": self.is_calibrated,
-            "confidence": self.confidence,
+            "calibration_support": self.calibration_support,
+            "confidence": self.calibration_support,
             "lifecycle_state": self.lifecycle_state,
             "baseline_samples": getattr(self.baseline, "n_samples", 1),
         }
