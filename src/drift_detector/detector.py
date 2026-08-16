@@ -56,9 +56,14 @@ class TurnScore:
     drifted: bool
     compacted_reset: bool = False
     notice: Optional[str] = None
+    calibrated: bool = True
+    confidence: str = "moderate"
+    lifecycle_state: str = "monitoring"
 
     @property
     def badge(self) -> str:
+        if not self.calibrated or self.lifecycle_state == "calibrating":
+            return "calibrating"
         if self.drifted:
             return "drift detected"
         if self.threshold_breach:
@@ -275,9 +280,32 @@ class DriftDetector:
             drifted=drifted,
             compacted_reset=compacted_reset,
             notice=notice,
+            calibrated=self.is_calibrated,
+            confidence=self.confidence,
+            lifecycle_state=self.lifecycle_state,
         )
         self.history.append(ts)
         return ts
+
+    @property
+    def is_calibrated(self) -> bool:
+        """True if baseline contains sufficient statistical samples (>=3)."""
+        return getattr(self.baseline, "n_samples", 1) >= 3
+
+    @property
+    def confidence(self) -> str:
+        """Confidence grade based on baseline sample population."""
+        n = getattr(self.baseline, "n_samples", 1)
+        if n >= 10:
+            return "high"
+        if n >= 3:
+            return "moderate"
+        return "low"
+
+    @property
+    def lifecycle_state(self) -> str:
+        """Explicit lifecycle state: 'monitoring' vs 'calibrating'."""
+        return "monitoring" if self.is_calibrated else "calibrating"
 
     def check_response(
         self,
@@ -309,6 +337,9 @@ class DriftDetector:
             "trend_alarm": score.trend_alarm,
             "compacted_reset": score.compacted_reset,
             "notice": score.notice,
+            "calibrated": score.calibrated,
+            "confidence": score.confidence,
+            "lifecycle_state": score.lifecycle_state,
             "latency_ms": round(latency, 2),
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "ph_running_mean": round(self.ph.mean, 4) if self.use_trend else None,
@@ -332,5 +363,9 @@ class DriftDetector:
             "metric": self.metric,
             "trend_rule": self.use_trend,
             "has_drifted": self.has_drifted,
+            "calibrated": self.is_calibrated,
+            "confidence": self.confidence,
+            "lifecycle_state": self.lifecycle_state,
+            "baseline_samples": getattr(self.baseline, "n_samples", 1),
         }
 

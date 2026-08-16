@@ -48,7 +48,8 @@ def test_mcp_auto_baseline_and_drift_lifecycle():
     status_raw = drift_get_status()
     status = json.loads(status_raw)
     assert status["status"] == "ON"
-    assert status["calibrated"] is True
+    assert status["confidence"] in ["low", "moderate", "high"]
+    assert status["lifecycle_state"] in ["calibrating", "monitoring"]
     assert status["turns"] >= 1
 
 

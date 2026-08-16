@@ -327,14 +327,21 @@ def drift_evaluate_turn(
 
 @mcp.tool()
 def drift_get_status() -> str:
-    """Get active session status and summary statistics."""
-    global _detector, _enabled
+    """Get active session status, lifecycle state, calibration confidence, and summary statistics."""
+    global _detector, _enabled, _warmup_buffer
     status_str = "ON" if _enabled else "OFF"
     if _detector is None:
-        return json.dumps({"status": status_str, "calibrated": False, "turns": 0})
+        return json.dumps({
+            "status": status_str,
+            "lifecycle_state": "calibrating" if _warmup_buffer else "uninitialised",
+            "calibrated": False,
+            "confidence": "none",
+            "warmup_turns": len(_warmup_buffer),
+            "warmup_target": _warmup_target,
+            "turns": 0,
+        }, indent=2)
     res = _detector.summary()
     res["status"] = status_str
-    res["calibrated"] = True
     return json.dumps(res, indent=2)
 
 
