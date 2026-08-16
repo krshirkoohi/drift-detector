@@ -128,12 +128,57 @@ class OpenAICompatibleProvider:
         return l2_normalise(vecs)
 
 
+class LocalTransformerProvider:
+    """Offline real neural transformer embedding provider (e.g. all-MiniLM-L6-v2, roberta-base)."""
+
+    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2", dim: int | None = None):
+        self.model_name = model_name
+        self.tokenizer = None
+        self.model = None
+        self._dim = dim
+
+    def _lazy_init(self) -> None:
+        if self.tokenizer is None or self.model is None:
+            from transformers import AutoTokenizer, AutoModel
+            import torch
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModel.from_pretrained(self.model_name)
+            self.model.eval()
+            self._dim = self.model.config.hidden_size
+
+    @property
+    def dim(self) -> int:
+        if self._dim is None:
+            self._lazy_init()
+        return self._dim
+
+    def embed(self, texts: Sequence[str]) -> np.ndarray:
+        self._lazy_init()
+        import torch
+
+        if not texts:
+            return np.zeros((0, self.dim))
+
+        inputs = self.tokenizer(list(texts), padding=True, truncation=True, return_tensors="pt")
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            token_embeddings = outputs[0]
+            attention_mask = inputs["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
+            sum_embeddings = torch.sum(token_embeddings * attention_mask, dim=1)
+            sum_mask = torch.clamp(attention_mask.sum(dim=1), min=1e-9)
+            mean_pooled = (sum_embeddings / sum_mask).cpu().numpy()
+            return l2_normalise(mean_pooled)
+
+
 def get_provider(name: str, **kwargs) -> EmbeddingProvider:
     name = name.lower()
     if name in ("local", "deterministic", "test"):
         return DeterministicProvider(**kwargs)
+    if name in ("transformer", "transformers", "hf", "roberta", "minilm", "sbert", "local_transformer", "local-transformer"):
+        return LocalTransformerProvider(**kwargs)
     if name == "gemini":
         return GeminiProvider(**kwargs)
     if name in ("openai", "openai-compatible", "ollama"):
         return OpenAICompatibleProvider(**kwargs)
     raise ValueError(f"Unknown provider: {name}")
+

@@ -103,21 +103,21 @@ Validated in automated benchmark suites (`experiments/comparative_benchmark.py` 
 
 ### 1. Vector Math vs. LLM-as-a-Judge
 
-| Metric | Drift-Detector (Vector Math) | LLM-as-a-Judge (Prompt Evaluator) | Advantage |
-|---|---|---|---|
-| **Mean Turn Latency** | **0.020 ms (19.8 μs)** | ~850 ms | **42,000x faster** |
-| **P99 Turn Latency** | **0.029 ms (28.7 μs)** | ~1,450 ms | **50,000x lower jitter** |
-| **Cost per 10k Turns** | **$0.00 (100% Free)** | ~$2.85 USD | **Zero API spend** |
-| **Throughput** | **50,065 turns/sec** | 1.18 turns/sec | Real-time inline scoring |
-| **Memory Footprint** | **~1.0 KB (Float32 Centroid)** | Entire context window buffer | Constant-time $O(1)$ overhead |
+| Metric | Vector Math (Deterministic) | Neural Transformer (`all-MiniLM-L6-v2`) | LLM-as-a-Judge (Prompt Evaluator) | Advantage |
+|---|---|---|---|---|
+| **Mean Turn Latency** | **0.019 ms (19.2 μs)** | **5.16 ms** | ~850 ms | **165x – 44,000x faster** |
+| **P99 Turn Latency** | **0.022 ms (22.4 μs)** | **7.45 ms** | ~1,450 ms | **190x – 65,000x lower jitter** |
+| **Cost per 10k Turns** | **$0.00 (100% Free)** | **$0.00 (Local PyTorch)** | ~$2.85 USD | **Zero API spend** |
+| **Throughput** | **51,797 turns/sec** | **193.7 turns/sec** | 1.18 turns/sec | Real-time inline stream scoring |
+| **Memory Footprint** | **~1.0 KB (Centroid)** | **~1.5 KB (Centroid)** | Entire context window buffer | Constant-time $O(1)$ overhead |
 
 ### 2. Detection Reliability & Stress Benchmarks
 
 | Evaluation Dimension | Workload / Scenario | Measured Result |
 |---|---|---|
-| **Blip Forgiveness (FPR)** | 50 transient single-turn tangents | **0.0% false alarms** (100% forgiven) |
-| **Sustained Drift (TPR)** | 50 multi-turn off-topic sequences | **100.0% true positive detection** (lag = 3.0 turns) |
-| **Baseline Separation ($\Delta$)** | On-task vs off-topic across dims 32–768 | **+0.25 to +0.27 distance margin** |
+| **Neural Blip Forgiveness (FPR)** | 30 transient single-turn tangents (`all-MiniLM`) | **0.0% false alarms** (100% forgiven) |
+| **Neural Sustained Drift (TPR)** | 30 multi-turn off-topic sequences (`all-MiniLM`) | **100.0% true positive detection** (lag = 3.0 turns) |
+| **Neural Baseline Separation ($\Delta$)** | On-task vs off-topic (`all-MiniLM-L6-v2`) | **+0.4367 distance margin** (FDR = 9.5) |
 | **Compaction Recovery** | Context compression event | **100% accumulator wipe & re-alignment** |
 | **Concurrency & Thread Safety** | 50 parallel worker threads | **100% thread-safe** (zero race conditions) |
 
