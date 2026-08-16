@@ -1,22 +1,40 @@
-# Drift-Detector
+# Drift Detector
 
-**Drift-Detector** is an early-warning monitoring engine for AI agents. It embeds assistant responses, measures their vector distance from an on-task baseline centroid, and flags when the agent quietly drifts off-task.
+**Drift Detector** is a lightweight, early-warning check-engine light for long AI coding sessions. It embeds assistant responses, measures vector distance from an on-task baseline centroid, and warns the operator when the agent quietly drifts away from the session's core working mode.
 
 One-off tangents are forgiven as transient blips. Sustained divergence is flagged.
 
-[![Interactive Demo](https://img.shields.io/badge/Demo-Live_Simulator-blue)](https://krshirkoohi.github.io/drift-detector/) [![Tests](https://img.shields.io/badge/Tests-24%2F24_Passing-brightgreen)](tests/) [![Architecture](https://img.shields.io/badge/MCP-FastMCP_Ready-purple)](src/drift_detector/mcp_server.py)
+[![Interactive Demo](https://img.shields.io/badge/Demo-Live_Simulator-blue)](https://krshirkoohi.github.io/drift-detector/) [![Tests](https://img.shields.io/badge/Tests-31%2F31_Passing-brightgreen)](tests/) [![Architecture](https://img.shields.io/badge/MCP-FastMCP_Ready-purple)](src/drift_detector/mcp_server.py)
+
+---
+
+## The Core Proposition
+
+> *"A local check-engine light for long AI coding sessions. Drift Detector watches for sustained departure from the session's working mode, forgives one-off tangents, and warns the operator before they continue trusting an off-task run."*
+
+### What Drift Detector Is and Is Not
+
+* **What it is:** A continuous semantic alignment monitor that tracks vector departure from the initial session task baseline.
+* **What it forgives:** Transient blips, one-off operator queries, jokes, or quick tool lookups.
+* **What it is NOT:**
+  * **Not a fact-checker:** It does not verify correctness of code, APIs, or statements within an on-topic domain.
+  * **Not a code linter or syntax verifier:** Use compiler errors, linters, and unit tests for code correctness.
+  * **Not a proof of context exhaustion:** It detects topic and mode departure, not theoretical LLM token window degradation.
 
 ---
 
 ## Key Capabilities
 
-* **Page-Hinkley CUSUM Trend Gating:** Distinguishes isolated tangents from permanent divergence. A single off-topic joke or query is forgiven; persistent domain drift across consecutive turns trips the alarm.
-* **Dynamic Auto-Baselining:** Automatically calibrates an ultra-lightweight ~1 KB `float32` centroid from the opening turns of any chat session. No manual baseline JSON required.
-* **Compaction Lifecycle Recovery:** Built-in listener (`drift_compact_reset`) that automatically clears historical accumulators and re-centers the baseline whenever conversation context is compressed.
-* **FastMCP Server Integration:** Runs natively as an MCP server (`drift-detector-mcp`) compatible with Claude Desktop, Cursor, and Antigravity.
-* **High-Throughput Core:** Benchmarked at **50,000+ turns/second** (< 0.02ms per evaluation) with a tiny memory footprint.
-
-> **Scope Note:** Drift-Detector is a *semantic alignment* tool, not a fact checker. It detects topic wandering, mode shifts, and domain drift; it does not judge factual correctness within an on-topic response.
+1. **Page-Hinkley CUSUM Trend Gating:** Distinguishes isolated tangents from permanent divergence. A single off-topic query is forgiven; persistent domain drift across consecutive turns trips the alert.
+2. **Explicit Semantic Providers (Zero Silent Fallbacks):**
+   * `local`: Real local neural embedding model (`sentence-transformers/all-MiniLM-L6-v2` or `roberta-base` via PyTorch).
+   * `gemini`: Hosted Google Gemini embedding API.
+   * `openai`: Hosted OpenAI / Ollama compatible embedding API.
+   * `test` / `deterministic`: Offline hash projection for fast CI and math invariant validation.
+3. **Decoupled Anchor & Compaction Lifecycle:** When context compaction occurs, transient Page-Hinkley trend accumulators are reset while **preserving the original mission anchor** by default to prevent accumulated drift from silently renormalising. Explicit `rebase()` allows intentional task transitions.
+4. **Explicit Calibration Confidence:** Sessions transition through explicit lifecycle states (`calibrating` vs `monitoring`) with confidence grades (`low`, `moderate`, `high`) based on baseline sample population.
+5. **Homogeneous Transformation:** Standardised on assistant response embeddings across both calibration and live evaluation.
+6. **Tri-Partite Validated:** Segregated test suites across `tests/unit/` (invariants), `tests/synthetic/` (10k stress & microbenchmarks), and `tests/real_sessions/` (multi-turn real developer transcripts).
 
 ---
 
@@ -30,17 +48,9 @@ cd drift-detector
 pip install -e .
 ```
 
-### 2. Interactive Terminal Test
+### 2. FastMCP Server Setup
 
-Test live typing and real-time sub-input indicators directly in your terminal:
-
-```bash
-python interactive_test.py
-```
-
-### 3. FastMCP Server Setup
-
-Add `drift-detector` to your MCP client configuration (e.g. `claude_desktop_config.json` or Antigravity):
+Add `drift-detector` to your MCP client configuration (e.g. `claude_desktop_config.json`, Cursor, or Antigravity):
 
 ```json
 {
@@ -52,86 +62,92 @@ Add `drift-detector` to your MCP client configuration (e.g. `claude_desktop_conf
 }
 ```
 
-Available slash commands & tools:
-* `/drift status` — View active turn counts, running mean distance, and drift metrics.
-* `/drift off` — Disable background monitoring (zero turn overhead).
-* `/drift on` — Re-enable auto-calibrated monitoring.
-* `/drift reset` — Clear session history and re-baseline.
+#### MCP Tools & Control Plane:
+* `drift_evaluate_turn(agent_response, ...)` — Evaluate an agent turn in background.
+* `drift_compact_reset(compacted_summary, ...)` — Reset Page-Hinkley accumulators on context compaction.
+* `drift_rebase(anchor_text, ...)` — Explicitly rebase mission centroid upon intentional task change.
+* `drift_get_status()` — View session metrics, lifecycle state (`calibrating`/`monitoring`), and confidence.
+* `drift_toggle(mode)` — Toggle background monitoring `on`, `off`, `status`, or `reset`.
 
 ---
 
 ## Python API Usage
 
 ```python
-from drift_detector.core import DriftDetector
-from drift_detector.embedding import DeterministicProvider
+from drift_detector import DriftDetector, get_provider
 
-# Initialize with known-good on-task examples
+# Initialize with real local neural model (all-MiniLM-L6-v2)
+provider = get_provider("local")
+
 detector = DriftDetector.from_examples(
     baseline_texts=[
-        "Building backend APIs in Python and FastAPI",
-        "Writing unit tests with pytest and coverage reporting",
-        "Database migrations and PostgreSQL query optimisation"
+        "Building backend APIs in Python and FastAPI with async database sessions",
+        "Writing unit tests with pytest and mocked database fixtures",
+        "Database migrations and PostgreSQL query performance tuning"
     ],
-    provider=DeterministicProvider(dim=256),
+    provider=provider,
     metric="cosine",
     use_trend=True
 )
 
-# Score incoming assistant turns
-turn1 = detector.score("Here is the FastAPI router implementation with dependency injection.")
-print(turn1.badge)  # "nominal"
+# 1. On-task response
+score1 = detector.score("Implementing FastAPI route handlers with dependency injection.")
+print(score1.badge)  # "nominal"
 
-# Isolated tangent (blip)
-turn2 = detector.score("Why did the chef bring a ladder? To raise the flavour of the sauce!")
-print(turn2.badge)  # "threshold breach" (forgiven by Page-Hinkley)
+# 2. Isolated tangent (blip)
+score2 = detector.score("To undo your last local git commit, run git reset --soft HEAD~1.")
+print(score2.badge)  # "threshold breach" (forgiven by Page-Hinkley)
 
-# Return to task resets the accumulator
-turn3 = detector.score("Configuring PostgreSQL connection pool settings for async workers.")
-print(turn3.badge)  # "nominal"
+# 3. Return to task resets the streak
+score3 = detector.score("Configuring SQLAlchemy connection pooling and async engine parameters.")
+print(score3.badge)  # "nominal"
 
-# Review session summary
-summary = detector.summary()
-print(summary)
+# 4. Compaction reset (preserves original mission anchor)
+detector.handle_compaction(compacted_summary="Session summary: FastAPI endpoints configured.")
+
+# 5. Session summary
+print(detector.summary())
 ```
 
 ---
 
-## Benchmarks & Comparative Evaluation
+## Latency, Microbenchmarks & Performance Boundaries
 
-Validated in automated benchmark suites (`experiments/comparative_benchmark.py` and `tests/test_benchmarks.py`):
+Performance characteristics across different operational tiers:
 
-### 1. Vector Math vs. LLM-as-a-Judge
+### 1. Execution Profiles & Model Latencies
 
-| Metric | Vector Math (Deterministic) | Neural Transformer (`all-MiniLM-L6-v2`) | LLM-as-a-Judge (Prompt Evaluator) | Advantage |
+| Evaluation Layer | Technology / Implementation | Turn Latency | Cost per 10k Turns | Memory Footprint |
 |---|---|---|---|---|
-| **Mean Turn Latency** | **0.019 ms (19.2 μs)** | **5.16 ms** | ~850 ms | **165x – 44,000x faster** |
-| **P99 Turn Latency** | **0.022 ms (22.4 μs)** | **7.45 ms** | ~1,450 ms | **190x – 65,000x lower jitter** |
-| **Cost per 10k Turns** | **$0.00 (100% Free)** | **$0.00 (Local PyTorch)** | ~$2.85 USD | **Zero API spend** |
-| **Throughput** | **51,797 turns/sec** | **193.7 turns/sec** | 1.18 turns/sec | Real-time inline stream scoring |
-| **Memory Footprint** | **~1.0 KB (Centroid)** | **~1.5 KB (Centroid)** | Entire context window buffer | Constant-time $O(1)$ overhead |
+| **Vector Scoring (Microbenchmark)** | NumPy dot-product & Page-Hinkley update | **0.019 ms ($19.2\ \mu\text{s}$)** | **$0.00** | ~1.0 KB float32 centroid |
+| **Local Neural Inference** | `sentence-transformers/all-MiniLM-L6-v2` | **5.16 ms** (CPU) | **$0.00** (Local) | ~1.5 KB centroid (+ PyTorch weights) |
+| **Hosted Neural Embedding** | Google Gemini / OpenAI Embeddings API | **~100 – 250 ms** (Network) | ~$0.002 USD | ~3.0 KB centroid |
+| **LLM-as-a-Judge (Scenario Model)** | Secondary Frontier LLM Prompt Evaluator | **~600 – 900 ms** (Network) | ~$2.85 USD | Entire conversation context buffer |
 
-### 2. Detection Reliability & Stress Benchmarks
+> *Note: Vector scoring ($19\ \mu\text{s}$) measures isolated mathematical distance computation. End-to-end latency in production includes embedding generation ($5\text{ ms}$ local or network API latency). LLM-as-a-judge latency and cost figures are modelled scenario assumptions based on typical frontier LLM pricing (~1,500 prompt tokens / 100 output tokens).*
 
-| Evaluation Dimension | Workload / Scenario | Measured Result |
+### 2. Detection Reliability & Empirical Validation
+
+Validated across 31 automated test cases in `tests/`:
+
+| Dimension | Scenario | Measured Result |
 |---|---|---|
-| **Neural Blip Forgiveness (FPR)** | 30 transient single-turn tangents (`all-MiniLM`) | **0.0% false alarms** (100% forgiven) |
-| **Neural Sustained Drift (TPR)** | 30 multi-turn off-topic sequences (`all-MiniLM`) | **100.0% true positive detection** (lag = 3.0 turns) |
-| **Neural Baseline Separation ($\Delta$)** | On-task vs off-topic (`all-MiniLM-L6-v2`) | **+0.4367 distance margin** (FDR = 9.5) |
-| **Compaction Recovery** | Context compression event | **100% accumulator wipe & re-alignment** |
-| **Concurrency & Thread Safety** | 50 parallel worker threads | **100% thread-safe** (zero race conditions) |
-
+| **Neural Blip Forgiveness (FPR)** | 30 isolated single-turn tangents (`all-MiniLM`) | **0.0% false alarms** (100% blip forgiveness) |
+| **Neural Sustained Drift (TPR)** | 30 multi-turn off-topic sequences (`all-MiniLM`) | **100.0% true positive detection** (lag = 3 turns) |
+| **Real AI Coding Transcripts** | 20-turn refactoring, tangent, and baking drift | **100% accurate classification** on real transcripts |
+| **Compaction Recovery** | 100 consecutive context compactions | **100% mathematical & numerical stability** |
+| **Stress Throughput** | 10,000 streaming evaluation turns | **> 50,000 turns/second** (zero memory leak) |
 
 ---
 
 ## Interactive Web Simulator
 
-A standalone HTML simulation is hosted on GitHub Pages:
+Try the simulator directly in your browser:
 
-🔗 **[Launch Interactive Web Demo](https://krshirkoohi.github.io/drift-detector/)**
+🔗 **[Launch Interactive Web Simulator](https://krshirkoohi.github.io/drift-detector/)**
 
 ---
 
 ## License
 
-MIT License. Designed and maintained by Kavia.
+MIT License. Developed and maintained by Kavia.
