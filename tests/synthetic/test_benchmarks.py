@@ -6,6 +6,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+try:
+    import torch
+    import transformers
+    HAS_NEURAL = True
+except ImportError:
+    HAS_NEURAL = False
+
+pytestmark = pytest.mark.skipif(not HAS_NEURAL, reason="Neural dependencies (torch, transformers) not installed")
+
 from experiments.comparative_benchmark import (
     run_benchmark_a,
     run_benchmark_b,

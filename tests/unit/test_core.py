@@ -82,10 +82,10 @@ def test_get_provider_mappings():
 
 def test_local_transformer_provider_fail_fast():
     from drift_detector.embedding import LocalTransformerProvider
-    
-    # Nonexistent model should raise clear RuntimeError (no silent fallback)
+
+    # Nonexistent model or missing packages should raise clear RuntimeError (no silent fallback)
     provider = LocalTransformerProvider(model_name="nonexistent/fake-model-12345")
-    with pytest.raises(RuntimeError, match="Failed to load local embedding model"):
+    with pytest.raises(RuntimeError, match="(Failed to load local embedding model|requires 'torch' and 'transformers')"):
         provider.embed(["Some test text"])
 
 
