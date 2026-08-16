@@ -185,7 +185,7 @@ def drift_compact_reset(compacted_summary: str) -> str:
     """
     global _detector, _warmup_buffer, _provider, _metric, _use_trend, _enabled
     if not compacted_summary.strip():
-        return "Compacted summary empty; session reset without new baseline."
+        return "[driftd] Chat compacted: detector reset (session reset without new baseline)."
 
     provider = _ensure_provider()
     baseline_obj = _build_auto_baseline([compacted_summary])
@@ -197,13 +197,18 @@ def drift_compact_reset(compacted_summary: str) -> str:
     )
     _detector = DriftDetector(inner)
     _warmup_buffer = [compacted_summary]
-    return f"Drift detector re-baselined on compacted summary (memory: ~1KB centroid, 0 prior turns)."
+    return f"[driftd] Chat compacted: detector reset · Drift detector re-baselined on compacted summary (~1KB centroid, 0 prior turns)."
+
 
 
 @mcp.tool()
 def drift_evaluate_turn(
     agent_response: str,
     user_prompt: str = "",
+    history_len: Optional[int] = None,
+    prompt_tokens: Optional[int] = None,
+    is_compacted: bool = False,
+    compacted_summary: Optional[str] = None,
     notice_mode: str = "simple",
 ) -> str:
     """Evaluate an agent turn in the background. Zero-cost when off; returns discreet status on drift.
@@ -211,11 +216,37 @@ def drift_evaluate_turn(
     Args:
         agent_response: Text of the assistant/agent response.
         user_prompt: Optional text of the user prompt.
+        history_len: Optional message history count to detect compaction truncation.
+        prompt_tokens: Optional token count to detect compaction token drop.
+        is_compacted: Explicit flag indicating chat compaction occurred.
+        compacted_summary: Optional summary text from compaction.
         notice_mode: 'simple' for concise discreet flag, 'detailed' for full JSON metric scorecard.
     """
     global _enabled, _detector, _warmup_buffer, _metric, _use_trend
     if not _enabled:
         return json.dumps({"status": "disabled", "drifted": False})
+
+    # Detect /compact in user prompt
+    prompt_clean = user_prompt.strip()
+    if prompt_clean.startswith("/compact"):
+        is_compacted = True
+        if compacted_summary is None:
+            parts = prompt_clean.split(" ", 1)
+            if len(parts) > 1:
+                compacted_summary = parts[1].strip()
+
+    # If compaction with summary occurs before detector is initialized or re-seeding
+    if is_compacted and compacted_summary and compacted_summary.strip():
+        provider = _ensure_provider()
+        baseline_obj = _build_auto_baseline([compacted_summary.strip()])
+        inner = InnerDetector(
+            baseline=baseline_obj,
+            provider=provider,
+            metric=_metric,
+            use_trend=_use_trend,
+        )
+        _detector = DriftDetector(inner)
+        _warmup_buffer = [compacted_summary]
 
     # Auto-calibration on initial turns if no static baseline was provided
     if _detector is None:
@@ -239,10 +270,20 @@ def drift_evaluate_turn(
         )
         _detector = DriftDetector(inner)
 
-    result: TurnScore = _detector.score(agent_response)
+    result: TurnScore = _detector.score(
+        agent_response,
+        history_len=history_len,
+        prompt_tokens=prompt_tokens,
+        is_compacted=is_compacted,
+        compacted_summary=compacted_summary,
+    )
 
     if notice_mode == "detailed":
         return json.dumps(result.to_dict(), indent=2)
+
+    # Compaction reset notice
+    if result.compacted_reset and result.notice:
+        return result.notice
 
     # Discreet inline notices
     if result.drifted:
@@ -256,6 +297,7 @@ def drift_evaluate_turn(
         "cosine_distance": result.cosine_distance,
         "drifted": False,
     })
+
 
 
 @mcp.tool()

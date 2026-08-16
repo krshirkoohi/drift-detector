@@ -59,12 +59,39 @@ class DriftSession:
         
         self.history: List[DriftVerdict] = []
         self.logger = SessionLogger(log_dir) if log_dir else None
+        self.prev_history_len: Optional[int] = None
+        self.prev_prompt_tokens: Optional[int] = None
         
         # Dynamic Auto-Baseline parameters per chat (Handwritten Spec: n=20 turns)
         self.is_auto: bool = False
         self.warm_up_turns: int = 20
         self.auto_ready: bool = False
         self.auto_embeddings: List[np.ndarray] = []
+
+    def handle_compaction(self, compacted_summary: Optional[str] = None) -> str:
+        """Reset streaming Page-Hinkley state and re-seed baseline after chat compaction."""
+        self.ph_n = 0
+        self.ph_running_mean = 0.0
+        self.ph_running_sum = 0.0
+        self.ph_min_sum = 0.0
+        self.ph_exceed_streak = 0
+        self.has_drifted = False
+        
+        if compacted_summary and compacted_summary.strip():
+            emb = self.embedding_adapter.embed(compacted_summary.strip())
+            if emb:
+                self.centroid = np.array(emb)
+                self.examples = [compacted_summary.strip()]
+        
+        return "[driftd] Chat compacted: detector reset"
+
+    def reset(self) -> None:
+        """Reset session streaming state."""
+        self.handle_compaction()
+        self.history = []
+        self.prev_history_len = None
+        self.prev_prompt_tokens = None
+
 
     @classmethod
     def initialise_auto(
@@ -194,21 +221,51 @@ class DriftSession:
             log_dir=log_dir,
         )
 
-    def observe(self, response_text: str) -> DriftVerdict:
+    def observe(
+        self,
+        response_text: str,
+        history_len: Optional[int] = None,
+        prompt_tokens: Optional[int] = None,
+        is_compacted: bool = False,
+        compacted_summary: Optional[str] = None,
+    ) -> DriftVerdict:
         """
         Observe a new response, score it, and update the session status.
         
         Args:
             response_text: The text to evaluate.
+            history_len: Optional message history length to detect context truncation.
+            prompt_tokens: Optional prompt token count to detect token drops.
+            is_compacted: Explicit flag indicating context compaction occurred.
+            compacted_summary: Optional summary text from compaction to re-seed baseline.
             
         Returns:
             A DriftVerdict containing the scores and drift state.
         """
         start_time = time.time()
         
+        # Check compaction triggers
+        if is_compacted or (compacted_summary is not None and compacted_summary.strip()):
+            self.handle_compaction(compacted_summary=compacted_summary)
+        elif history_len is not None and self.prev_history_len is not None and history_len < self.prev_history_len:
+            self.handle_compaction(compacted_summary=compacted_summary)
+        elif (
+            prompt_tokens is not None
+            and self.prev_prompt_tokens is not None
+            and self.prev_prompt_tokens > 200
+            and prompt_tokens < int(self.prev_prompt_tokens * 0.6)
+        ):
+            self.handle_compaction(compacted_summary=compacted_summary)
+            
+        if history_len is not None:
+            self.prev_history_len = history_len
+        if prompt_tokens is not None:
+            self.prev_prompt_tokens = prompt_tokens
+        
         # 1. Fetch response embedding
         response_emb_list = self.embedding_adapter.embed(response_text)
         response_emb = np.array(response_emb_list)
+
         
         # Auto-baseline dynamic centroid calculation during warm-up phase
         if self.is_auto and not self.auto_ready:

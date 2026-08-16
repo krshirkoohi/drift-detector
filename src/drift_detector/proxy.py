@@ -51,18 +51,70 @@ def _session_id(headers, payload: dict) -> str:
     return "default"
 
 
-def _score_turn(sid: str, text: str) -> dict:
-    state = SESSIONS.setdefault(sid, {"responses": [], "detector": None})
+def _score_turn(
+    sid: str,
+    text: str,
+    history_len: int | None = None,
+    prompt_tokens: int | None = None,
+    is_compacted: bool = False,
+    compacted_summary: str | None = None,
+) -> dict:
+    state = SESSIONS.setdefault(sid, {
+        "responses": [],
+        "detector": None,
+        "prev_history_len": None,
+        "prev_prompt_tokens": None,
+    })
+    
+    # Check for compaction triggers in proxy
+    compaction_detected = is_compacted
+    if history_len is not None and state.get("prev_history_len") is not None and history_len < state["prev_history_len"]:
+        compaction_detected = True
+    if (
+        prompt_tokens is not None
+        and state.get("prev_prompt_tokens") is not None
+        and state["prev_prompt_tokens"] > 200
+        and prompt_tokens < int(state["prev_prompt_tokens"] * 0.6)
+    ):
+        compaction_detected = True
+
+    if history_len is not None:
+        state["prev_history_len"] = history_len
+    if prompt_tokens is not None:
+        state["prev_prompt_tokens"] = prompt_tokens
+
+    if compaction_detected and state["detector"] is not None:
+        state["detector"].handle_compaction(compacted_summary=compacted_summary)
+
     state["responses"].append(text)
     n = CONFIG["baseline_n"]
     if state["detector"] is None:
         if len(state["responses"]) < n:
-            return {"phase": "collecting-baseline", "collected": len(state["responses"]), "needed": n}
+            return {
+                "phase": "collecting-baseline",
+                "collected": len(state["responses"]),
+                "needed": n,
+                "compacted_reset": compaction_detected,
+            }
         baseline = BaselineStore(PROVIDER).build(state["responses"][:n])
         state["detector"] = DriftDetector(baseline, PROVIDER)
-        return {"phase": "baseline-ready", "collected": n, "needed": n}
-    score = state["detector"].score(text)
-    return {"phase": "scoring", **score.to_dict()}
+        return {
+            "phase": "baseline-ready",
+            "collected": n,
+            "needed": n,
+            "compacted_reset": compaction_detected,
+        }
+    score = state["detector"].score(
+        text,
+        history_len=history_len,
+        prompt_tokens=prompt_tokens,
+        is_compacted=compaction_detected,
+        compacted_summary=compacted_summary,
+    )
+    res = {"phase": "scoring", **score.to_dict()}
+    if compaction_detected:
+        res["compacted_reset"] = True
+    return res
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -98,12 +150,40 @@ class Handler(BaseHTTPRequestHandler):
         drift = {}
         try:
             text = body["choices"][0]["message"]["content"]
-            drift = _score_turn(sid, text)
+            messages = payload.get("messages", [])
+            history_len = len(messages)
+            prompt_tokens = body.get("usage", {}).get("prompt_tokens") or sum(len(str(m.get("content", ""))) // 4 for m in messages)
+            
+            # Check for /compact command in recent user prompt
+            is_compacted = False
+            compacted_summary = None
+            for m in reversed(messages):
+                if m.get("role") == "user":
+                    u_content = str(m.get("content", "")).strip()
+                    if u_content.startswith("/compact"):
+                        is_compacted = True
+                        parts = u_content.split(" ", 1)
+                        if len(parts) > 1:
+                            compacted_summary = parts[1].strip()
+                    break
+
+            drift = _score_turn(
+                sid,
+                text,
+                history_len=history_len,
+                prompt_tokens=prompt_tokens,
+                is_compacted=is_compacted,
+                compacted_summary=compacted_summary,
+            )
             if CONFIG["inline_warnings"] and drift.get("drifted"):
                 body["choices"][0]["message"]["content"] = (
                     text
                     + "\n\n[driftd] Sustained semantic drift detected "
                     + f"(cosine {drift['cosine_distance']}). Consider compacting or resetting context."
+                )
+            elif CONFIG["inline_warnings"] and drift.get("compacted_reset"):
+                body["choices"][0]["message"]["content"] = (
+                    text + "\n\n[driftd] Chat compacted: detector reset."
                 )
         except (KeyError, IndexError, TypeError):
             drift = {"phase": "skipped", "reason": "unexpected upstream response shape"}
@@ -114,8 +194,10 @@ class Handler(BaseHTTPRequestHandler):
             "x-drift-phase": str(drift.get("phase", "")),
             "x-drift-cosine": str(drift.get("cosine_distance", "")),
             "x-drift-alarm": str(drift.get("drifted", "")).lower(),
+            "x-drift-compaction-reset": str(bool(drift.get("compacted_reset", False))).lower(),
         }
         self._send(200, body, headers)
+
 
     def do_GET(self) -> None:
         if self.path == "/healthz":

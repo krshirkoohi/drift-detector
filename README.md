@@ -5,7 +5,8 @@
 One-off tangents are forgiven as transient blips. Sustained divergence is flagged.
 
 [![Interactive Demo](https://img.shields.io/badge/Demo-Live_Simulator-blue)](https://krshirkoohi.github.io/drift-detector/)
-[![Tests](https://img.shields.io/badge/Tests-10%2F10_Passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-20%2F20_Passing-brightgreen)](tests/)
+
 [![Architecture](https://img.shields.io/badge/MCP-FastMCP_Ready-purple)](src/drift_detector/mcp_server.py)
 
 ---

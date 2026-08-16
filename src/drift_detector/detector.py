@@ -5,6 +5,9 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
+from typing import Optional
+import time
+
 from .baseline import Baseline
 from .embedding import EmbeddingProvider, l2_normalise
 
@@ -51,6 +54,8 @@ class TurnScore:
     threshold_breach: bool
     trend_alarm: bool
     drifted: bool
+    compacted_reset: bool = False
+    notice: Optional[str] = None
 
     @property
     def badge(self) -> str:
@@ -88,11 +93,91 @@ class DriftDetector:
         self.provider = provider
         self.metric = metric
         self.use_trend = use_trend
+        self.ph_delta = ph_delta
+        self.ph_lambda = ph_lambda
         self.ph = PageHinkley(delta=ph_delta, lam=ph_lambda)
         self.turn = 0
         self.history: list[TurnScore] = []
+        self.prev_history_len: Optional[int] = None
+        self.prev_prompt_tokens: Optional[int] = None
+        self.has_drifted: bool = False
 
-    def score(self, text: str) -> TurnScore:
+    def reset_page_hinkley(self) -> None:
+        """Reset Page-Hinkley streaming accumulators, mean, and latch state."""
+        self.ph.reset()
+        self.has_drifted = False
+
+    def reset(self) -> None:
+        """Reset turn count, history, and streaming detector state."""
+        self.reset_page_hinkley()
+        self.turn = 0
+        self.history = []
+        self.prev_history_len = None
+        self.prev_prompt_tokens = None
+
+    def handle_compaction(
+        self,
+        compacted_summary: Optional[str] = None,
+        new_baseline: Optional[Baseline] = None,
+    ) -> str:
+        """Reset detector accumulators and re-seed baseline after chat compaction."""
+        self.reset_page_hinkley()
+        self.turn = 0
+
+        if new_baseline is not None:
+            self.baseline = new_baseline
+        elif compacted_summary and compacted_summary.strip():
+            vecs = l2_normalise(self.provider.embed([compacted_summary.strip()]))
+            centroid = vecs[0]
+            self.baseline = Baseline(
+                centroid=centroid,
+                cosine_threshold=max(self.baseline.cosine_threshold, 0.45),
+                euclidean_threshold=max(self.baseline.euclidean_threshold, 0.65),
+                n_samples=1,
+            )
+
+        return "[driftd] Chat compacted: detector reset"
+
+    def score(
+        self,
+        text: str,
+        history_len: Optional[int] = None,
+        prompt_tokens: Optional[int] = None,
+        is_compacted: bool = False,
+        compacted_summary: Optional[str] = None,
+    ) -> TurnScore:
+        compacted_reset = False
+        notice = None
+
+        # 1. Explicit compaction signal
+        if is_compacted or (compacted_summary is not None and compacted_summary.strip()):
+            self.handle_compaction(compacted_summary=compacted_summary)
+            compacted_reset = True
+            notice = "[driftd] Chat compacted: detector reset"
+
+        # 2. History truncation detection: len(history) < prev_len
+        elif history_len is not None and self.prev_history_len is not None and history_len < self.prev_history_len:
+            self.handle_compaction(compacted_summary=compacted_summary)
+            compacted_reset = True
+            notice = f"[driftd] Chat compacted (history truncated {self.prev_history_len} -> {history_len}): detector reset"
+
+        # 3. Token drop detection: abrupt drop in prompt tokens across turns
+        elif (
+            prompt_tokens is not None
+            and self.prev_prompt_tokens is not None
+            and self.prev_prompt_tokens > 200
+            and prompt_tokens < int(self.prev_prompt_tokens * 0.6)
+        ):
+            self.handle_compaction(compacted_summary=compacted_summary)
+            compacted_reset = True
+            notice = f"[driftd] Chat compacted (tokens dropped {self.prev_prompt_tokens} -> {prompt_tokens}): detector reset"
+
+        # Track lengths for next turn
+        if history_len is not None:
+            self.prev_history_len = history_len
+        if prompt_tokens is not None:
+            self.prev_prompt_tokens = prompt_tokens
+
         self.turn += 1
         v = l2_normalise(self.provider.embed([text]))[0]
         cos = float(1.0 - v @ self.baseline.centroid)
@@ -104,9 +189,60 @@ class DriftDetector:
         breach = d > thr
         alarm = self.ph.update(d) if self.use_trend else False
         drifted = alarm if self.use_trend else breach
-        ts = TurnScore(self.turn, round(cos, 4), round(euc, 4), breach, alarm, drifted)
+        if drifted:
+            self.has_drifted = True
+        ts = TurnScore(
+            turn=self.turn,
+            cosine_distance=round(cos, 4),
+            euclidean_distance=round(euc, 4),
+            threshold_breach=breach,
+            trend_alarm=alarm,
+            drifted=drifted,
+            compacted_reset=compacted_reset,
+            notice=notice,
+        )
         self.history.append(ts)
         return ts
+
+    def check_response(
+        self,
+        response_text: str,
+        history_len: Optional[int] = None,
+        prompt_tokens: Optional[int] = None,
+        is_compacted: bool = False,
+        compacted_summary: Optional[str] = None,
+    ) -> dict:
+        """Unified check_response interface returning full dictionary metrics."""
+        t0 = time.time()
+        score = self.score(
+            response_text,
+            history_len=history_len,
+            prompt_tokens=prompt_tokens,
+            is_compacted=is_compacted,
+            compacted_summary=compacted_summary,
+        )
+        latency = (time.time() - t0) * 1000
+        return {
+            "turn_index": score.turn,
+            "cosine_distance": score.cosine_distance,
+            "euclidean_distance": score.euclidean_distance,
+            "threshold": self.baseline.cosine_threshold if self.metric == "cosine" else self.baseline.euclidean_threshold,
+            "metric": self.metric,
+            "is_drifting": score.drifted,
+            "drift_detected": score.drifted,
+            "threshold_breach": score.threshold_breach,
+            "trend_alarm": score.trend_alarm,
+            "compacted_reset": score.compacted_reset,
+            "notice": score.notice,
+            "latency_ms": round(latency, 2),
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "ph_running_mean": round(self.ph.mean, 4) if self.use_trend else None,
+            "ph_running_sum": round(self.ph.cum, 4) if self.use_trend else None,
+            "ph_min_sum": round(self.ph.cum_min, 4) if self.use_trend else None,
+            "ph_statistic": round(self.ph.statistic, 4) if self.use_trend else None,
+            "ph_threshold": self.ph_lambda if self.use_trend else None,
+            "ph_delta": self.ph_delta if self.use_trend else None,
+        }
 
     def summary(self) -> dict:
         key = "cosine_distance" if self.metric == "cosine" else "euclidean_distance"
@@ -120,4 +256,6 @@ class DriftDetector:
             "peak_distance": round(float(np.max(ds)), 4) if ds else 0.0,
             "metric": self.metric,
             "trend_rule": self.use_trend,
+            "has_drifted": self.has_drifted,
         }
+

@@ -155,14 +155,29 @@ class AgentHarness:
 
         if self.verbose:
             _banner(f"SESSION STARTED  ·  {self._session_id}")
+            b_name = getattr(getattr(self.detector, 'baseline_store', None), 'name', 'default')
+            thr = getattr(self.detector, 'threshold', getattr(getattr(self.detector, 'baseline', None), 'cosine_threshold', 0.45))
             print(
-                f"  Baseline : {self.detector.baseline_store.name}\n"
+                f"  Baseline : {b_name}\n"
                 f"  Metric   : {self.detector.metric.upper()}\n"
-                f"  Threshold: {self.detector.threshold:.4f}\n"
+                f"  Threshold: {thr:.4f}\n"
                 f"  Trend    : {'ON  (Page-Hinkley)' if self.detector.use_trend else 'OFF'}\n"
             )
 
         return self._session_id
+
+    def handle_compaction(self, compacted_summary: Optional[str] = None) -> str:
+        """Forward compaction reset to the underlying detector."""
+        if hasattr(self.detector, 'handle_compaction'):
+            msg = self.detector.handle_compaction(compacted_summary=compacted_summary)
+        elif hasattr(self.detector, 'reset'):
+            self.detector.reset()
+            msg = "[driftd] Chat compacted: detector reset"
+        else:
+            msg = "[driftd] Chat compacted: detector reset"
+        if self.verbose:
+            print(f"\n  {msg}\n")
+        return msg
 
     def end_session(self) -> SessionSummary:
         """
@@ -183,9 +198,12 @@ class AgentHarness:
         cos_dists = [t.cosine_distance for t in self._turns]
         euc_dists = [t.euclidean_distance for t in self._turns]
 
+        b_name = getattr(getattr(self.detector, 'baseline_store', None), 'name', 'default')
+        thr = getattr(self.detector, 'threshold', getattr(getattr(self.detector, 'baseline', None), 'cosine_threshold', 0.45))
+
         summary = SessionSummary(
             session_id=self._session_id,
-            baseline_name=self.detector.baseline_store.name,
+            baseline_name=b_name,
             start_time_utc=self._session_start,      # type: ignore[arg-type]
             end_time_utc=end_time,
             total_turns=total,
@@ -196,7 +214,7 @@ class AgentHarness:
             peak_cosine_distance=max(cos_dists) if cos_dists else 0.0,
             peak_euclidean_distance=max(euc_dists) if euc_dists else 0.0,
             metric=self.detector.metric,
-            threshold=self.detector.threshold,
+            threshold=thr,
             use_trend=self.detector.use_trend,
             turns=[t.to_dict() for t in self._turns],
         )
@@ -239,6 +257,10 @@ class AgentHarness:
         self,
         user_prompt: str,
         agent_response: str,
+        history_len: Optional[int] = None,
+        prompt_tokens: Optional[int] = None,
+        is_compacted: bool = False,
+        compacted_summary: Optional[str] = None,
     ) -> TurnRecord:
         """
         Run a single conversation turn through the drift pipeline.
@@ -249,6 +271,10 @@ class AgentHarness:
         Args:
             user_prompt:    The user's input text for this turn.
             agent_response: The model's response text for this turn.
+            history_len:    Optional message count for history truncation detection.
+            prompt_tokens:  Optional token count for token drop detection.
+            is_compacted:   Explicit flag for context compaction.
+            compacted_summary: Optional summary text from compaction.
 
         Returns:
             A `TurnRecord` containing full drift metrics for this turn.
@@ -256,8 +282,43 @@ class AgentHarness:
         if self._session_id is None:
             raise RuntimeError("No active session.  Call start_session() first.")
 
+        # Check /compact hook in user prompt
+        prompt_clean = user_prompt.strip()
+        if prompt_clean.startswith("/compact"):
+            is_compacted = True
+            if compacted_summary is None:
+                parts = prompt_clean.split(" ", 1)
+                compacted_summary = parts[1].strip() if len(parts) > 1 else None
+
         self._turn_index += 1
-        metrics = self.detector.check_response(agent_response)
+        if hasattr(self.detector, 'check_response'):
+            metrics = self.detector.check_response(
+                agent_response,
+                history_len=history_len,
+                prompt_tokens=prompt_tokens,
+                is_compacted=is_compacted,
+                compacted_summary=compacted_summary,
+            )
+        else:
+            score = self.detector.score(
+                agent_response,
+                history_len=history_len,
+                prompt_tokens=prompt_tokens,
+                is_compacted=is_compacted,
+                compacted_summary=compacted_summary,
+            )
+            thr = getattr(self.detector, 'threshold', getattr(getattr(self.detector, 'baseline', None), 'cosine_threshold', 0.45))
+            metrics = {
+                "turn_index": score.turn,
+                "cosine_distance": score.cosine_distance,
+                "euclidean_distance": score.euclidean_distance,
+                "threshold": thr,
+                "metric": self.detector.metric,
+                "is_drifting": score.drifted,
+                "drift_detected": score.drifted,
+                "latency_ms": 0.0,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
 
         record = TurnRecord(
             turn_index=self._turn_index,
@@ -283,6 +344,7 @@ class AgentHarness:
             ph_delta=metrics.get("ph_delta"),
             trend_alarm=metrics.get("trend_alarm"),
         )
+
 
         self._turns.append(record)
 

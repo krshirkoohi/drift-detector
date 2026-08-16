@@ -55,9 +55,16 @@ def cmd_interactive(args: argparse.Namespace) -> int:
             continue
         if line.lower() in ("exit", "quit", "q"):
             break
+        if line.startswith("/compact"):
+            parts = line.split(" ", 1)
+            summary = parts[1].strip() if len(parts) > 1 else None
+            msg = det.handle_compaction(compacted_summary=summary)
+            print(f"        └─ {msg}\n")
+            continue
         score = det.score(line)
         print(f"        └─ status: {score.badge}  (cos: {score.cosine_distance:.4f} | euc: {score.euclidean_distance:.4f})\n")
     print("\nSession summary:")
+
     print(json.dumps(det.summary(), indent=2))
     return 0
 
