@@ -9,6 +9,7 @@ from drift_detector.embedding import DeterministicProvider
 from drift_detector.harness import AgentHarness
 from drift_detector.mcp_server import (
     drift_toggle,
+    drift_attach_session,
     drift_compact_reset,
     drift_evaluate_turn,
     drift_get_status,
@@ -205,17 +206,19 @@ def test_harness_compact_command_hook(provider, sample_baseline):
 
 def test_mcp_evaluate_turn_with_compaction():
     """Verify FastMCP evaluate_turn handles history truncation and /compact prompts."""
-    drift_toggle("reset")
-    drift_toggle("on")
-    
-    # Calibrate initial turns
-    drift_evaluate_turn("Distributed consensus Raft protocol.", user_prompt="Explain Raft.")
-    drift_evaluate_turn("Leader election and log replication.", user_prompt="Explain leader election.")
-    
+    sid = "test-compaction-mcp-prompt"
+    drift_attach_session(provider="test", session_id=sid)
+
+    # Calibrate initial 3 turns
+    drift_evaluate_turn("Distributed consensus Raft protocol.", user_prompt="Explain Raft.", session_id=sid)
+    drift_evaluate_turn("Leader election and log replication.", user_prompt="Explain leader election.", session_id=sid)
+    drift_evaluate_turn("Quorum writes and split-brain prevention.", user_prompt="Explain quorum.", session_id=sid)
+
     # Turn with /compact user prompt
     res = drift_evaluate_turn(
-        "Continuing the architectural discussion.",
+        "Continuing the architectural discussion on consensus.",
         user_prompt="/compact Summary of previous distributed consensus discussion.",
+        session_id=sid,
     )
     # Status should reflect reset / nominal
     assert "driftd" in res or "nominal" in res or "status" in res

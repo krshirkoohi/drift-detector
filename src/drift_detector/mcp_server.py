@@ -2,10 +2,11 @@
 FastMCP server for inline semantic drift detection across LLM agents.
 
 Features:
-- Global on/off toggle for zero-overhead background monitoring.
-- Lightweight auto-baseline calculation from initial turns (1KB float32 memory footprint).
-- Context compaction listening & reset to recalibrate baseline on compressed summaries.
-- Discreet, low-noise inline drift alerts.
+- Global on/off toggle and session-aware monitoring.
+- Canonical auto-baselining from initial turns (>=3 samples) using BaselineStore.
+- Context compaction listening (Page-Hinkley accumulators reset; mission anchor preserved by default).
+- Explicit semantic provider resolution (defaults to 'local' via PyTorch, or DRIFT_PROVIDER env).
+- Explicit rebase tool for intentional task/mission transitions.
 """
 from __future__ import annotations
 
@@ -13,45 +14,68 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 from mcp.server.fastmcp import FastMCP
 
 from .baseline import Baseline, BaselineStore
 from .detector import DriftDetector, TurnScore
-from .embedding import EmbeddingProvider, DeterministicProvider, get_provider, l2_normalise
+from .embedding import EmbeddingProvider, get_provider
 
 mcp = FastMCP("drift-detector")
 
-_enabled: bool = True
-_detector: Optional[DriftDetector] = None
-_provider: Optional[EmbeddingProvider] = None
-_metric: str = "cosine"
-_use_trend: bool = True
-_warmup_buffer: List[str] = []
-_warmup_target: int = 2  # initial turns to calibrate auto-baseline
+_WARMUP_MIN_SAMPLES: int = 3
 
 
-def _ensure_provider() -> EmbeddingProvider:
-    global _provider
-    if _provider is None:
-        _provider = DeterministicProvider(dim=256)
-    return _provider
+class SessionState:
+    """State container for a monitored session."""
+
+    def __init__(self, session_id: str = "default", provider_name: Optional[str] = None):
+        self.session_id = session_id
+        self.enabled: bool = True
+        self.metric: str = "cosine"
+        self.use_trend: bool = True
+        self.provider_name: str = provider_name or os.environ.get("DRIFT_PROVIDER", "local")
+        self._provider: Optional[EmbeddingProvider] = None
+        self.detector: Optional[DriftDetector] = None
+        self.warmup_buffer: List[str] = []
+
+    @property
+    def provider(self) -> EmbeddingProvider:
+        if self._provider is None:
+            self._provider = get_provider(self.provider_name)
+        return self._provider
+
+    def reset(self) -> None:
+        self.detector = None
+        self.warmup_buffer = []
+
+    def build_baseline(self, texts: List[str]) -> Baseline:
+        store = BaselineStore(self.provider)
+        return store.build(texts)
 
 
-def _build_auto_baseline(texts: List[str]) -> Baseline:
-    provider = _ensure_provider()
-    vecs = l2_normalise(provider.embed(texts))
-    centroid = l2_normalise(np.mean(vecs, axis=0, keepdims=True))[0]
-    cos_dists = [float(1.0 - v @ centroid) for v in vecs]
-    euc_dists = [float(np.linalg.norm(v - centroid)) for v in vecs]
-    cos_thr = max(float(np.percentile(cos_dists, 95)) * 1.5, 0.45)
-    euc_thr = max(float(np.percentile(euc_dists, 95)) * 1.5, 0.65)
-    return Baseline(
-        centroid=centroid,
-        cosine_threshold=cos_thr,
-        euclidean_threshold=euc_thr,
-        n_samples=len(texts),
-    )
+class SessionRegistry:
+    """Registry managing multiple isolated drift detection sessions."""
+
+    def __init__(self):
+        self._sessions: Dict[str, SessionState] = {}
+        self._global_enabled: bool = True
+
+    def get_session(self, session_id: Optional[str] = None) -> SessionState:
+        sid = (session_id or "default").strip()
+        if sid not in self._sessions:
+            self._sessions[sid] = SessionState(session_id=sid)
+        return self._sessions[sid]
+
+    @property
+    def global_enabled(self) -> bool:
+        return self._global_enabled
+
+    @global_enabled.setter
+    def global_enabled(self, value: bool) -> None:
+        self._global_enabled = value
+
+
+_registry = SessionRegistry()
 
 
 @mcp.prompt("drift")
@@ -85,33 +109,35 @@ def drift_reset_prompt() -> str:
 
 
 @mcp.tool()
-def drift_toggle(state: Optional[str] = None) -> str:
+def drift_toggle(state: Optional[str] = None, session_id: Optional[str] = None) -> str:
     """Toggle background drift detection on or off, or check status.
 
     Args:
         state: 'on' to enable, 'off' to disable, 'status' to check, or 'reset' to clear session state.
+        session_id: Optional session identifier for isolated multi-session monitoring.
     """
-    global _enabled, _detector, _warmup_buffer
+    session = _registry.get_session(session_id)
     if state is None:
-        _enabled = not _enabled
-        return f"Drift detector monitoring is now {'ON' if _enabled else 'OFF'}."
+        session.enabled = not session.enabled
+        return f"Drift detector monitoring is now {'ON' if session.enabled else 'OFF'}."
 
     s = state.strip().lower()
     if s == "on":
-        _enabled = True
+        session.enabled = True
         return "Drift detector monitoring is now ON."
     elif s == "off":
-        _enabled = False
+        session.enabled = False
         return "Drift detector monitoring is now OFF (zero turn overhead)."
     elif s == "reset":
-        _detector = None
-        _warmup_buffer = []
+        session.reset()
         return "Drift detector session reset. Will auto-baseline on next turn."
     elif s == "status":
-        status_str = "ON" if _enabled else "OFF"
-        if _detector is None:
-            return f"Drift detector is {status_str} (pending auto-calibration on next turn)."
-        summary = _detector.summary()
+        status_str = "ON" if session.enabled else "OFF"
+        if session.detector is None:
+            return f"Drift detector is {status_str} (pending auto-calibration on next {max(0, _WARMUP_MIN_SAMPLES - len(session.warmup_buffer))} turns)."
+        summary = session.detector.summary()
+        summary["session_id"] = session.session_id
+        summary["status"] = status_str
         return f"Drift detector is {status_str}.\nSession stats: {json.dumps(summary, indent=2)}"
     else:
         return f"Unknown toggle state '{state}'. Use 'on', 'off', 'status', or 'reset'."
@@ -124,26 +150,28 @@ def drift_attach_session(
     provider: str = "local",
     use_trend: bool = True,
     threshold: Optional[float] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """Attach drift-detector with a specific baseline or enable auto-baselining.
 
     Args:
         baseline: 'auto' for dynamic in-chat baseline, or preset name/file path.
         metric: Distance metric ('cosine' or 'euclidean').
-        provider: Embedding provider ('local'/'deterministic', 'gemini', or 'openai').
+        provider: Embedding provider ('local', 'test'/'deterministic', 'gemini', or 'openai').
         use_trend: Enable Page-Hinkley trend checking for sustained drift detection.
         threshold: Optional manual distance threshold override.
+        session_id: Optional session identifier for isolated multi-session monitoring.
     """
-    global _detector, _provider, _metric, _use_trend, _warmup_buffer, _enabled
-    _enabled = True
-    _metric = metric
-    _use_trend = use_trend
-    _provider = get_provider(provider)
-    _warmup_buffer = []
+    session = _registry.get_session(session_id)
+    session.enabled = True
+    session.metric = metric
+    session.use_trend = use_trend
+    session.provider_name = provider
+    session._provider = get_provider(provider)
+    session.reset()
 
     if baseline.lower() in ("auto", "self", "dynamic"):
-        _detector = None
-        return f"Attached to dynamic auto-baseline session (metric={metric}, trend={use_trend}). Will calibrate on initial turns."
+        return f"Attached to dynamic auto-baseline session (metric={metric}, trend={use_trend}, provider={provider}). Will calibrate on initial {_WARMUP_MIN_SAMPLES} turns."
 
     # Preset baseline file
     if os.path.exists(baseline):
@@ -158,16 +186,16 @@ def drift_attach_session(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "baselines", "default.json"
         )
 
-    baseline_obj = BaselineStore(_provider).build_from_file(baseline_path)
+    baseline_obj = BaselineStore(session.provider).build_from_file(baseline_path)
     if threshold is not None:
         if metric == "cosine":
             baseline_obj.cosine_threshold = threshold
         else:
             baseline_obj.euclidean_threshold = threshold
 
-    _detector = DriftDetector(
+    session.detector = DriftDetector(
         baseline=baseline_obj,
-        provider=_provider,
+        provider=session.provider,
         metric=metric,
         use_trend=use_trend,
     )
@@ -175,56 +203,67 @@ def drift_attach_session(
 
 
 @mcp.tool()
-def drift_compact_reset(compacted_summary: str = "", rebase_anchor: bool = True) -> str:
-    """Reset and recalibrate drift baseline following a chat compaction / context summarisation event.
+def drift_compact_reset(
+    compacted_summary: str = "",
+    rebase_anchor: bool = False,
+    session_id: Optional[str] = None,
+) -> str:
+    """Reset Page-Hinkley drift accumulators following chat compaction, preserving mission anchor by default.
 
     Args:
         compacted_summary: Optional new compacted summary of the conversation.
-        rebase_anchor: Whether to rebase the semantic anchor on the summary (default: True).
+        rebase_anchor: Whether to rebase the semantic mission anchor on the summary (default: False).
+        session_id: Optional session identifier.
     """
-    global _detector, _warmup_buffer, _provider, _metric, _use_trend, _enabled
-    if not compacted_summary.strip():
-        if _detector is not None:
-            _detector.handle_compaction()
-        return "[driftd] Chat compacted: detector reset (session reset without new baseline)."
+    session = _registry.get_session(session_id)
+    if session.detector is None:
+        session.reset()
+        if rebase_anchor and compacted_summary.strip():
+            session.warmup_buffer = [compacted_summary.strip()]
+        return "[driftd] Chat compacted: detector reset (pending baseline calibration)."
 
-    provider = _ensure_provider()
-    if _detector is None or rebase_anchor:
-        baseline_obj = _build_auto_baseline([compacted_summary])
-        _detector = DriftDetector(
-            baseline=baseline_obj,
-            provider=provider,
-            metric=_metric,
-            use_trend=_use_trend,
-        )
-        _warmup_buffer = [compacted_summary]
-        return "[driftd] Chat compacted: detector reset · Drift detector re-baselined on compacted summary (~1KB centroid, 0 prior turns)."
-
-    return _detector.handle_compaction(compacted_summary=compacted_summary, rebase_anchor=False)
+    return session.detector.handle_compaction(
+        compacted_summary=compacted_summary if compacted_summary.strip() else None,
+        rebase_anchor=rebase_anchor,
+    )
 
 
 @mcp.tool()
-def drift_rebase(anchor_text: str, reason: str = "explicit_task_transition") -> str:
+def drift_rebase(
+    anchor_text: str,
+    reason: str = "explicit_task_transition",
+    session_id: Optional[str] = None,
+) -> str:
     """Explicitly rebase the semantic mission anchor upon an intentional task or scope change.
 
     Args:
         anchor_text: The new reference mission description, prompt, or exemplary response.
         reason: Description of the task change.
+        session_id: Optional session identifier.
     """
-    global _detector, _provider, _metric, _use_trend
-    provider = _ensure_provider()
-    if _detector is None:
-        baseline_obj = _build_auto_baseline([anchor_text])
-        _detector = DriftDetector(
+    session = _registry.get_session(session_id)
+    if session.detector is None:
+        # Initialise with single anchor text
+        vecs = session.provider.embed([anchor_text.strip()])
+        centroid = vecs[0]
+        # Floor threshold for single example anchor
+        is_neural = getattr(session.provider, "model_name", None) is not None or getattr(session.provider, "model", None) is not None
+        cos_floor = 0.85 if getattr(session.provider, "model_name", None) is not None else 0.70 if is_neural else 0.45
+        baseline_obj = Baseline(
+            centroid=centroid,
+            cosine_threshold=cos_floor,
+            euclidean_threshold=1.20 if is_neural else 0.65,
+            n_samples=1,
+        )
+        session.detector = DriftDetector(
             baseline=baseline_obj,
-            provider=provider,
-            metric=_metric,
-            use_trend=_use_trend,
+            provider=session.provider,
+            metric=session.metric,
+            use_trend=session.use_trend,
         )
         return f"[driftd] Semantic mission anchor initialised ({reason})."
 
-    return _detector.rebase(anchor_text, reason=reason)
-
+    return session.detector.rebase(anchor_text, reason=reason)
 
 
 @mcp.tool()
@@ -236,6 +275,7 @@ def drift_evaluate_turn(
     is_compacted: bool = False,
     compacted_summary: Optional[str] = None,
     notice_mode: str = "simple",
+    session_id: Optional[str] = None,
 ) -> str:
     """Evaluate an agent turn in the background. Zero-cost when off; returns discreet status on drift.
 
@@ -247,9 +287,10 @@ def drift_evaluate_turn(
         is_compacted: Explicit flag indicating chat compaction occurred.
         compacted_summary: Optional summary text from compaction.
         notice_mode: 'simple' for concise discreet flag, 'detailed' for full JSON metric scorecard.
+        session_id: Optional session identifier.
     """
-    global _enabled, _detector, _warmup_buffer, _metric, _use_trend
-    if not _enabled:
+    session = _registry.get_session(session_id)
+    if not session.enabled:
         return json.dumps({"status": "disabled", "drifted": False})
 
     # Detect /compact in user prompt
@@ -261,41 +302,28 @@ def drift_evaluate_turn(
             if len(parts) > 1:
                 compacted_summary = parts[1].strip()
 
-    # If compaction with summary occurs before detector is initialized or re-seeding
-    if is_compacted and compacted_summary and compacted_summary.strip():
-        provider = _ensure_provider()
-        baseline_obj = _build_auto_baseline([compacted_summary.strip()])
-        _detector = DriftDetector(
-            baseline=baseline_obj,
-            provider=provider,
-            metric=_metric,
-            use_trend=_use_trend,
-        )
-        _warmup_buffer = [compacted_summary]
-
-    # Auto-calibration on initial turns if no static baseline was provided
-    if _detector is None:
-        # Standardise: embed assistant response ONLY (per V1 design insights)
+    # Auto-calibration on opening turns using canonical BaselineStore (>=3 samples)
+    if session.detector is None:
         text_sample = agent_response.strip()
-        _warmup_buffer.append(text_sample)
-        if len(_warmup_buffer) < _warmup_target:
+        session.warmup_buffer.append(text_sample)
+        if len(session.warmup_buffer) < _WARMUP_MIN_SAMPLES:
             return json.dumps({
                 "status": "calibrating",
-                "warmup_turn": len(_warmup_buffer),
-                "warmup_target": _warmup_target,
+                "warmup_turn": len(session.warmup_buffer),
+                "warmup_target": _WARMUP_MIN_SAMPLES,
                 "drifted": False,
             })
-        # Build ultra-lightweight auto-baseline
-        provider = _ensure_provider()
-        baseline_obj = _build_auto_baseline(_warmup_buffer)
-        _detector = DriftDetector(
+
+        # Build canonical baseline using BaselineStore (guarantees candidate_v1 thresholds and logic)
+        baseline_obj = session.build_baseline(session.warmup_buffer)
+        session.detector = DriftDetector(
             baseline=baseline_obj,
-            provider=provider,
-            metric=_metric,
-            use_trend=_use_trend,
+            provider=session.provider,
+            metric=session.metric,
+            use_trend=session.use_trend,
         )
 
-    result: TurnScore = _detector.score(
+    result: TurnScore = session.detector.score(
         agent_response,
         history_len=history_len,
         prompt_tokens=prompt_tokens,
@@ -320,27 +348,35 @@ def drift_evaluate_turn(
         "status": result.badge,
         "turn": result.turn,
         "cosine_distance": result.cosine_distance,
+        "calibration_support": result.calibration_support,
         "drifted": False,
     })
 
 
-
 @mcp.tool()
-def drift_get_status() -> str:
-    """Get active session status, lifecycle state, calibration confidence, and summary statistics."""
-    global _detector, _enabled, _warmup_buffer
-    status_str = "ON" if _enabled else "OFF"
-    if _detector is None:
+def drift_get_status(session_id: Optional[str] = None) -> str:
+    """Get active session status, lifecycle state, calibration support, and summary statistics.
+
+    Args:
+        session_id: Optional session identifier.
+    """
+    session = _registry.get_session(session_id)
+    status_str = "ON" if session.enabled else "OFF"
+    if session.detector is None:
         return json.dumps({
+            "session_id": session.session_id,
             "status": status_str,
-            "lifecycle_state": "calibrating" if _warmup_buffer else "uninitialised",
+            "lifecycle_state": "calibrating" if session.warmup_buffer else "uninitialised",
             "calibrated": False,
+            "calibration_support": "none",
             "confidence": "none",
-            "warmup_turns": len(_warmup_buffer),
-            "warmup_target": _warmup_target,
+            "warmup_turns": len(session.warmup_buffer),
+            "warmup_target": _WARMUP_MIN_SAMPLES,
             "turns": 0,
         }, indent=2)
-    res = _detector.summary()
+
+    res = session.detector.summary()
+    res["session_id"] = session.session_id
     res["status"] = status_str
     return json.dumps(res, indent=2)
 

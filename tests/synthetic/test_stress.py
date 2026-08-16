@@ -19,6 +19,7 @@ from drift_detector.core import DriftDetector
 from drift_detector.embedding import DeterministicProvider
 from drift_detector.mcp_server import (
     drift_toggle,
+    drift_attach_session,
     drift_compact_reset,
     drift_evaluate_turn,
     drift_get_status,
@@ -70,23 +71,30 @@ def test_10k_turns_throughput_and_memory():
 
 def test_100_compaction_cycles_numerical_stability():
     """Stress test executing 100 consecutive context compactions to verify mathematical stability."""
-    drift_toggle("reset")
+    sid = "stress-compaction-session"
+    drift_attach_session(provider="test", session_id=sid)
+
+    # Initial calibration
+    drift_evaluate_turn("Building high-performance microservices in Python.", session_id=sid)
+    drift_evaluate_turn("Configuring Redis distributed caching clusters.", session_id=sid)
+    drift_evaluate_turn("Optimizing database connection pool performance.", session_id=sid)
 
     for i in range(100):
         summary = f"Compacted summary cycle {i}: Focus is on building high-performance microservices and caching with Redis"
-        resp = drift_compact_reset(summary)
-        assert "Drift detector re-baselined" in resp
+        resp = drift_compact_reset(summary, rebase_anchor=False, session_id=sid)
+        assert "mission anchor preserved" in resp
 
-        # Evaluate a turn on the newly compacted context
+        # Evaluate a turn on the compacted context
         eval_resp = drift_evaluate_turn(
             agent_response="Implementing Redis cache cluster for microservice API",
             user_prompt="How do we scale cache?",
+            session_id=sid,
         )
         assert isinstance(eval_resp, str)
 
-    raw_status = drift_get_status()
+    raw_status = drift_get_status(session_id=sid)
     status = json.loads(raw_status) if isinstance(raw_status, str) else raw_status
-    assert status["turns"] == 1  # only 1 turn since last compaction
+    assert status["turns"] == 101
     assert status["drifted_turns"] == 0
     assert status["drift_rate"] == 0.0
     print("\n[Stress Test 2] 100 Compaction Cycles: 100% mathematically stable, zero accumulator drift.")
