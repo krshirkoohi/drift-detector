@@ -139,12 +139,24 @@ class LocalTransformerProvider:
 
     def _lazy_init(self) -> None:
         if self.tokenizer is None or self.model is None:
-            from transformers import AutoTokenizer, AutoModel
-            import torch
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModel.from_pretrained(self.model_name)
-            self.model.eval()
-            self._dim = self.model.config.hidden_size
+            try:
+                from transformers import AutoTokenizer, AutoModel
+                import torch
+            except ImportError as err:
+                raise RuntimeError(
+                    "LocalTransformerProvider requires 'torch' and 'transformers' packages. "
+                    f"Please install them or use provider='test'/'deterministic' for offline hash testing. Error: {err}"
+                ) from err
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+                self.model = AutoModel.from_pretrained(self.model_name)
+                self.model.eval()
+                self._dim = self.model.config.hidden_size
+            except Exception as err:
+                raise RuntimeError(
+                    f"Failed to load local embedding model '{self.model_name}': {err}. "
+                    "Ensure model weights are cached or network access is available."
+                ) from err
 
     @property
     def dim(self) -> int:
@@ -172,13 +184,13 @@ class LocalTransformerProvider:
 
 def get_provider(name: str, **kwargs) -> EmbeddingProvider:
     name = name.lower()
-    if name in ("local", "deterministic", "test"):
+    if name in ("test", "deterministic", "hash"):
         return DeterministicProvider(**kwargs)
-    if name in ("transformer", "transformers", "hf", "roberta", "minilm", "sbert", "local_transformer", "local-transformer"):
+    if name in ("local", "transformer", "transformers", "hf", "roberta", "minilm", "sbert", "local_transformer", "local-transformer"):
         return LocalTransformerProvider(**kwargs)
     if name == "gemini":
         return GeminiProvider(**kwargs)
     if name in ("openai", "openai-compatible", "ollama"):
         return OpenAICompatibleProvider(**kwargs)
-    raise ValueError(f"Unknown provider: {name}")
+    raise ValueError(f"Unknown provider: '{name}'. Valid providers: 'local' (real neural model), 'gemini', 'openai', or 'test'/'deterministic' (offline hash testing).")
 

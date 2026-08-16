@@ -57,3 +57,34 @@ def test_drift_detector_with_threshold_override():
     result = detector.score("Random off-topic text that shares no words.")
     
     assert isinstance(result.cosine_distance, float)
+
+
+def test_get_provider_mappings():
+    from drift_detector.embedding import (
+        get_provider,
+        DeterministicProvider,
+        LocalTransformerProvider,
+        GeminiProvider,
+        OpenAICompatibleProvider,
+    )
+    
+    assert isinstance(get_provider("test"), DeterministicProvider)
+    assert isinstance(get_provider("deterministic"), DeterministicProvider)
+    assert isinstance(get_provider("hash"), DeterministicProvider)
+    assert isinstance(get_provider("local"), LocalTransformerProvider)
+    assert isinstance(get_provider("transformer"), LocalTransformerProvider)
+    assert isinstance(get_provider("gemini"), GeminiProvider)
+    assert isinstance(get_provider("openai"), OpenAICompatibleProvider)
+    
+    with pytest.raises(ValueError, match="Unknown provider"):
+        get_provider("nonexistent_provider_abc")
+
+
+def test_local_transformer_provider_fail_fast():
+    from drift_detector.embedding import LocalTransformerProvider
+    
+    # Nonexistent model should raise clear RuntimeError (no silent fallback)
+    provider = LocalTransformerProvider(model_name="nonexistent/fake-model-12345")
+    with pytest.raises(RuntimeError, match="Failed to load local embedding model"):
+        provider.embed(["Some test text"])
+

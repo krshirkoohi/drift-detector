@@ -246,7 +246,8 @@ def drift_evaluate_turn(
 
     # Auto-calibration on initial turns if no static baseline was provided
     if _detector is None:
-        text_sample = f"{user_prompt}\n{agent_response}".strip()
+        # Standardise: embed assistant response ONLY (per V1 design insights)
+        text_sample = agent_response.strip()
         _warmup_buffer.append(text_sample)
         if len(_warmup_buffer) < _warmup_target:
             return json.dumps({
