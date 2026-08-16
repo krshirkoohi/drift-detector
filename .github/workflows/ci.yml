@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Test Python ${{ matrix.python-version }}
+  core-matrix:
+    name: Core Suite (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -25,6 +25,29 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
+      - name: Install core package and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run unit and synthetic test suites
+        run: |
+          pytest tests/unit tests/synthetic -v
+
+  neural-scenarios:
+    name: Neural Scenarios (Python 3.12)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
@@ -33,11 +56,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-hf-
 
-      - name: Install package and dependencies
+      - name: Install lightweight CPU PyTorch & Transformers
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[local,dev]
+          pip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install transformers
+          pip install -e .[dev]
 
-      - name: Run test suite
+      - name: Run full test suite including neural scenarios
         run: |
           pytest -v
