@@ -875,6 +875,22 @@ $('send').addEventListener('click', () => {
   const text = $('inp').value.trim();
   if (!text || isBusy) return;
   $('inp').value = '';
+  
+  if (text.startsWith('/compact')) {
+    const parts = text.split(' ');
+    const customSummary = parts.slice(1).join(' ').trim() || (distances.length ? "Culinary recipes and baking instructions" : "General software engineering");
+    baseCentroid = calculateCentroid([embed(customSummary)]);
+    phEngine.reset();
+    distances = [];
+    phStats = [];
+    driftedTurns = 0;
+    $('chatlog').innerHTML += `<div class="sysnote">🔄 [driftd] Chat compacted: detector reset (re-baselined on summary ~1KB centroid)</div>`;
+    $('chatlog').scrollTop = $('chatlog').scrollHeight;
+    updateBadges('ok', 'status: nominal · re-baselined on compact summary');
+    renderChart();
+    return;
+  }
+
   const toks = tokenize(text);
   let topic = 'code';
   if (toks.some(w => TOPIC_VOCAB.recipe.includes(w))) topic = 'recipe';
@@ -924,11 +940,12 @@ $('compact').addEventListener('click', () => {
   distances = [];
   phStats = [];
   driftedTurns = 0;
-  $('chatlog').innerHTML += `<div class="sysnote">🔄 Context Compacted: Centroid re-seeded on compressed summary. Accumulator reset.</div>`;
+  $('chatlog').innerHTML += `<div class="sysnote">🔄 [driftd] Chat compacted: detector reset (re-baselined on summary ~1KB centroid)</div>`;
   $('chatlog').scrollTop = $('chatlog').scrollHeight;
   updateBadges('ok', 'status: nominal · re-baselined on compact summary');
   renderChart();
 });
+
 
 $('reset').addEventListener('click', initSession);
 window.addEventListener('resize', renderChart);
