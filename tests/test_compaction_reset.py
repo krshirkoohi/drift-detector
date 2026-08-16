@@ -2,11 +2,10 @@ import json
 import pytest
 import numpy as np
 
-from drift_detector.core import DriftDetector
-from drift_detector.detector import DriftDetector as InnerDetector, PageHinkley, TurnScore
+from drift_detector.core import DriftDetector, DriftResult
+from drift_detector.detector import PageHinkley, TurnScore
 from drift_detector.baseline import BaselineStore, Baseline
 from drift_detector.embedding import DeterministicProvider
-from drift_detector.session import DriftSession
 from drift_detector.harness import AgentHarness
 from drift_detector.mcp_server import (
     drift_toggle,
@@ -57,7 +56,7 @@ def test_page_hinkley_reset():
 
 def test_detector_explicit_compaction_reset(provider, sample_baseline):
     """Verify detector handle_compaction resets PH state and returns standard log notice."""
-    det = InnerDetector(sample_baseline, provider, metric="cosine", use_trend=True)
+    det = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
     
     # Cause divergence / drift
     det.score("Distributed consensus Raft log replication.")
@@ -82,7 +81,7 @@ def test_detector_explicit_compaction_reset(provider, sample_baseline):
 
 def test_detector_compaction_with_new_summary(provider, sample_baseline):
     """Verify detector re-seeds centroid when compacted summary is provided."""
-    det = InnerDetector(sample_baseline, provider, metric="cosine", use_trend=True)
+    det = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
     
     # Original topic is distributed systems. Compaction introduces new topic: Frontend React UI
     summary = "Building frontend UI components and React styling with Tailwind CSS."
@@ -97,7 +96,7 @@ def test_detector_compaction_with_new_summary(provider, sample_baseline):
 
 def test_auto_compaction_history_truncation(provider, sample_baseline):
     """Verify automatic compaction reset when history length drops (len(history) < prev_len)."""
-    det = InnerDetector(sample_baseline, provider, metric="cosine", use_trend=True)
+    det = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
     
     # Turn 1: 10 messages
     det.score("Initial system architecture discussion.", history_len=10)
@@ -113,7 +112,7 @@ def test_auto_compaction_history_truncation(provider, sample_baseline):
 
 def test_auto_compaction_token_drop(provider, sample_baseline):
     """Verify automatic compaction reset when prompt tokens drop abruptly."""
-    det = InnerDetector(sample_baseline, provider, metric="cosine", use_trend=True)
+    det = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
     
     # Turn 1: 8,000 prompt tokens
     det.score("Discussing database sharding.", prompt_tokens=8000)
@@ -151,41 +150,37 @@ def test_core_api_compaction_methods(provider):
 
 
 def test_session_compaction_handling(provider):
-    """Verify DriftSession handles compaction resets and auto-detection."""
-    from drift_detector.embeddings import DeterministicEmbeddingAdapter
-    adapter = DeterministicEmbeddingAdapter(dim=32)
-    
-    session = DriftSession.initialise(
-        known_good_responses=[
+    """Verify DriftDetector handles compaction resets and auto-detection."""
+    detector = DriftDetector.from_examples(
+        baseline_texts=[
             "Distributed consensus and Raft state machine replication.",
             "Database clustering and quorum writes.",
             "Fault tolerance in distributed leader election.",
         ],
-        embedding_adapter=adapter,
+        provider=provider,
         metric="cosine",
         use_trend=True,
     )
     
     # Initial on-topic turn
-    session.observe("Distributed consensus and state machines.")
+    detector.score("Distributed consensus and state machines.")
     # Divergent turns
-    session.observe("Gardening tips for springtime flowers.")
-    session.observe("Planting tomatoes and organic fertilizer.")
+    detector.score("Gardening tips for springtime flowers.")
+    detector.score("Planting tomatoes and organic fertilizer.")
     
     # Compaction
-    session.handle_compaction(compacted_summary="The topic is now focused on microservice containerisation with Docker.")
-    assert session.ph_running_sum == 0.0
-    assert session.ph_running_mean == 0.0
-    assert session.has_drifted is False
+    detector.handle_compaction(compacted_summary="The topic is now focused on microservice containerisation with Docker.")
+    assert detector.ph.cum == 0.0
+    assert detector.ph.mean == 0.0
+    assert detector.has_drifted is False
     
-    verdict = session.observe("Building container images and running Docker containers.")
-    assert verdict.drift_detected is False
-
+    verdict = detector.score("Building container images and running Docker containers.")
+    assert verdict.drifted is False
 
 
 def test_harness_compact_command_hook(provider, sample_baseline):
     """Verify AgentHarness detects /compact hook and resets detector."""
-    inner = InnerDetector(sample_baseline, provider, metric="cosine", use_trend=True)
+    inner = DriftDetector(sample_baseline, provider, metric="cosine", use_trend=True)
     harness = AgentHarness(detector=inner, verbose=False)
     harness.start_session("test-compaction-harness")
     

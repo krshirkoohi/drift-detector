@@ -1,10 +1,11 @@
 """drift_detector: semantic drift detection for LLM agent sessions."""
 from .baseline import Baseline, BaselineStore
-from .detector import DriftDetector, PageHinkley, TurnScore
+from .detector import DriftDetector, DriftResult, PageHinkley, TurnScore
 from .embedding import (
     DeterministicProvider,
     EmbeddingProvider,
     GeminiProvider,
+    LocalTransformerProvider,
     OpenAICompatibleProvider,
     get_provider,
     l2_normalise,
@@ -16,9 +17,11 @@ __all__ = [
     "Baseline",
     "BaselineStore",
     "DriftDetector",
+    "DriftResult",
     "PageHinkley",
     "TurnScore",
     "DeterministicProvider",
+    "LocalTransformerProvider",
     "EmbeddingProvider",
     "GeminiProvider",
     "OpenAICompatibleProvider",

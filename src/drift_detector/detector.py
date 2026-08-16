@@ -71,6 +71,10 @@ class TurnScore:
         return d
 
 
+# DriftResult is the typed API contract alias for TurnScore
+DriftResult = TurnScore
+
+
 class DriftDetector:
     """Scores each response against the baseline centroid.
 
@@ -101,6 +105,35 @@ class DriftDetector:
         self.prev_history_len: Optional[int] = None
         self.prev_prompt_tokens: Optional[int] = None
         self.has_drifted: bool = False
+
+    @classmethod
+    def from_examples(
+        cls,
+        baseline_texts: list[str],
+        provider: EmbeddingProvider,
+        metric: str = "cosine",
+        use_trend: bool = True,
+        threshold: Optional[float] = None,
+        ph_delta: float = 0.005,
+        ph_lambda: float = 0.1,
+    ) -> DriftDetector:
+        """Initialize the DriftDetector directly from a list of baseline texts."""
+        from .baseline import BaselineStore
+        store = BaselineStore(provider)
+        baseline = store.build(baseline_texts)
+        if threshold is not None:
+            if metric == "cosine":
+                baseline.cosine_threshold = threshold
+            else:
+                baseline.euclidean_threshold = threshold
+        return cls(
+            baseline=baseline,
+            provider=provider,
+            metric=metric,
+            use_trend=use_trend,
+            ph_delta=ph_delta,
+            ph_lambda=ph_lambda,
+        )
 
     def reset_page_hinkley(self) -> None:
         """Reset Page-Hinkley streaming accumulators, mean, and latch state."""

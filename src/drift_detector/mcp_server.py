@@ -17,8 +17,7 @@ import numpy as np
 from mcp.server.fastmcp import FastMCP
 
 from .baseline import Baseline, BaselineStore
-from .core import DriftDetector
-from .detector import DriftDetector as InnerDetector, TurnScore
+from .detector import DriftDetector, TurnScore
 from .embedding import EmbeddingProvider, DeterministicProvider, get_provider, l2_normalise
 
 mcp = FastMCP("drift-detector")
@@ -166,13 +165,12 @@ def drift_attach_session(
         else:
             baseline_obj.euclidean_threshold = threshold
 
-    inner = InnerDetector(
+    _detector = DriftDetector(
         baseline=baseline_obj,
         provider=_provider,
         metric=metric,
         use_trend=use_trend,
     )
-    _detector = DriftDetector(inner)
     return f"Attached drift detector session using baseline '{baseline}' ({baseline_obj.n_samples} examples, metric={metric}, trend={use_trend})."
 
 
@@ -189,13 +187,12 @@ def drift_compact_reset(compacted_summary: str) -> str:
 
     provider = _ensure_provider()
     baseline_obj = _build_auto_baseline([compacted_summary])
-    inner = InnerDetector(
+    _detector = DriftDetector(
         baseline=baseline_obj,
         provider=provider,
         metric=_metric,
         use_trend=_use_trend,
     )
-    _detector = DriftDetector(inner)
     _warmup_buffer = [compacted_summary]
     return f"[driftd] Chat compacted: detector reset · Drift detector re-baselined on compacted summary (~1KB centroid, 0 prior turns)."
 
@@ -239,13 +236,12 @@ def drift_evaluate_turn(
     if is_compacted and compacted_summary and compacted_summary.strip():
         provider = _ensure_provider()
         baseline_obj = _build_auto_baseline([compacted_summary.strip()])
-        inner = InnerDetector(
+        _detector = DriftDetector(
             baseline=baseline_obj,
             provider=provider,
             metric=_metric,
             use_trend=_use_trend,
         )
-        _detector = DriftDetector(inner)
         _warmup_buffer = [compacted_summary]
 
     # Auto-calibration on initial turns if no static baseline was provided
@@ -262,13 +258,12 @@ def drift_evaluate_turn(
         # Build ultra-lightweight auto-baseline
         provider = _ensure_provider()
         baseline_obj = _build_auto_baseline(_warmup_buffer)
-        inner = InnerDetector(
+        _detector = DriftDetector(
             baseline=baseline_obj,
             provider=provider,
             metric=_metric,
             use_trend=_use_trend,
         )
-        _detector = DriftDetector(inner)
 
     result: TurnScore = _detector.score(
         agent_response,
