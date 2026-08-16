@@ -1,0 +1,50 @@
+{
+  "description": "Regression and benchmark dataset for Drift-Detector evaluation across transient blips, sustained drift, and context recovery.",
+  "on_task_pool": [
+    "You can sort a Python list in-place using list.sort(), or get a new sorted list with the built-in sorted() function.",
+    "Use a dictionary comprehension to invert a mapping: {v: k for k, v in original.items()}.",
+    "Python's contextlib.suppress() is a clean way to silently ignore specific exception types without a bare try/except.",
+    "The @dataclass decorator auto-generates __init__, __repr__, and __eq__ from annotated class fields.",
+    "You can chain itertools.chain() calls to lazily flatten nested iterables without materialising them in memory.",
+    "Use functools.lru_cache to memoize expensive pure functions with a simple decorator.",
+    "List comprehensions are generally faster than equivalent for-loop appends because the interpreter optimises the bytecode.",
+    "Pathlib.Path provides an object-oriented interface to the filesystem that works cross-platform without os.path juggling.",
+    "The walrus operator (:=) lets you assign a variable inside an expression, useful for avoiding repeated function calls in loops.",
+    "Generator expressions are memory-efficient alternatives to list comprehensions when you only need to iterate once.",
+    "asyncio.gather() runs multiple coroutines concurrently and collects their results in order.",
+    "Use __slots__ to reduce per-instance memory overhead when creating many instances of a class.",
+    "pytest fixtures with the 'function' scope are torn down and re-created between every test.",
+    "The bisect module provides O(log n) insertion into a sorted list using binary search.",
+    "NumPy broadcasting lets you perform element-wise operations on arrays of different shapes without explicit loops."
+  ],
+  "blip_pool": [
+    "Why did the tomato blush? Because it saw the salad dressing!",
+    "The recipe calls for two tablespoons of softened unsalted butter and pure cane sugar.",
+    "The capital of Australia is Canberra, not Sydney or Melbourne.",
+    "A standard espresso shot is brewed with approximately seven to nine grams of finely ground coffee.",
+    "The best time to visit Kyoto for cherry blossoms is usually late March to early April."
+  ],
+  "sustained_drift_pool": [
+    [
+      "Let's switch to discussing traditional Italian pasta making techniques.",
+      "First, prepare the semolina flour by creating a well in the center and cracking fresh eggs.",
+      "Knead the dough firmly for ten minutes until it develops a smooth and elastic texture.",
+      "Roll the pasta through the thinnest setting of your pasta machine and cut into tagliatelle.",
+      "Boil in heavily salted water for two to three minutes until al dente, then toss with brown butter."
+    ],
+    [
+      "Let's plan a hiking trip through the Swiss Alps and surrounding mountain passes.",
+      "Pack essential alpine gear including waterproof outer shells, trekking poles, and topographic maps.",
+      "The trail from Grindelwald to Kleine Scheidegg offers panoramic views of the Eiger north face.",
+      "Book mountain hut accommodations well in advance as high-season beds fill up months early.",
+      "Acclimatise properly before attempting high elevation crossings over 2,500 metres."
+    ],
+    [
+      "Gardening in early spring requires preparing the soil with organic compost and testing pH levels.",
+      "Sow cool-weather crops like spinach, radishes, and peas directly into raised garden beds.",
+      "Ensure drip irrigation lines are clear of winter debris and set timers for early morning watering.",
+      "Prune deciduous fruit trees before the first buds break to encourage healthy outward growth.",
+      "Apply organic mulch around perennial root zones to suppress weeds and retain soil moisture."
+    ]
+  ]
+}

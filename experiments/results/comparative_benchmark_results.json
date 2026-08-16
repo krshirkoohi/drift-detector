@@ -1,0 +1,88 @@
+{
+  "timestamp_utc": "2026-08-16T15:40:07Z",
+  "benchmark_a_cost_latency": {
+    "drift_detector": {
+      "mean_latency_us": 19.86,
+      "p50_latency_us": 19.25,
+      "p95_latency_us": 21.67,
+      "p99_latency_us": 28.71,
+      "throughput_turns_per_sec": 50065.3,
+      "cost_per_10k_turns_usd": 0.0,
+      "time_for_10k_turns_sec": 0.199
+    },
+    "llm_as_a_judge": {
+      "mean_latency_ms": 850.0,
+      "p99_latency_ms": 1450.0,
+      "cost_per_10k_turns_usd": 2.85,
+      "time_for_10k_turns_sec": 8500.0
+    },
+    "speedup_factor": 42800.5
+  },
+  "benchmark_b_separation": {
+    "dimension_evaluations": [
+      {
+        "dimension": 32,
+        "intra_mean": 0.7268,
+        "intra_std": 0.0985,
+        "inter_mean": 0.9855,
+        "inter_std": 0.1942,
+        "separation_delta": 0.2588,
+        "fisher_ratio": 1.41
+      },
+      {
+        "dimension": 64,
+        "intra_mean": 0.7245,
+        "intra_std": 0.1193,
+        "inter_mean": 0.9786,
+        "inter_std": 0.1516,
+        "separation_delta": 0.2541,
+        "fisher_ratio": 1.73
+      },
+      {
+        "dimension": 128,
+        "intra_mean": 0.7283,
+        "intra_std": 0.0882,
+        "inter_mean": 0.9852,
+        "inter_std": 0.0893,
+        "separation_delta": 0.257,
+        "fisher_ratio": 4.19
+      },
+      {
+        "dimension": 256,
+        "intra_mean": 0.722,
+        "intra_std": 0.0665,
+        "inter_mean": 0.9715,
+        "inter_std": 0.0535,
+        "separation_delta": 0.2494,
+        "fisher_ratio": 8.54
+      },
+      {
+        "dimension": 768,
+        "intra_mean": 0.71,
+        "intra_std": 0.0589,
+        "inter_mean": 0.9794,
+        "inter_std": 0.032,
+        "separation_delta": 0.2694,
+        "fisher_ratio": 16.14
+      }
+    ]
+  },
+  "benchmark_c_fpr_tpr": {
+    "trials_count": 50,
+    "page_hinkley": {
+      "false_positive_rate": 0.0,
+      "true_positive_rate": 1.0,
+      "mean_detection_lag_turns": 3.0,
+      "verdict": "100% blip forgiveness, 100% sustained drift detection"
+    },
+    "instantaneous_threshold": {
+      "false_positive_rate": 1.0,
+      "true_positive_rate": 1.0
+    }
+  },
+  "benchmark_d_compaction_recovery": {
+    "post_compaction_mean_distance": 1.0063,
+    "accumulator_wiped": true,
+    "recovery_status": "Clean alignment re-established without false alarms."
+  }
+}

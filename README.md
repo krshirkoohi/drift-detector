@@ -4,10 +4,7 @@
 
 One-off tangents are forgiven as transient blips. Sustained divergence is flagged.
 
-[![Interactive Demo](https://img.shields.io/badge/Demo-Live_Simulator-blue)](https://krshirkoohi.github.io/drift-detector/)
-[![Tests](https://img.shields.io/badge/Tests-20%2F20_Passing-brightgreen)](tests/)
-
-[![Architecture](https://img.shields.io/badge/MCP-FastMCP_Ready-purple)](src/drift_detector/mcp_server.py)
+[![Interactive Demo](https://img.shields.io/badge/Demo-Live_Simulator-blue)](https://krshirkoohi.github.io/drift-detector/) [![Tests](https://img.shields.io/badge/Tests-24%2F24_Passing-brightgreen)](tests/) [![Architecture](https://img.shields.io/badge/MCP-FastMCP_Ready-purple)](src/drift_detector/mcp_server.py)
 
 ---
 
@@ -17,7 +14,7 @@ One-off tangents are forgiven as transient blips. Sustained divergence is flagge
 * **Dynamic Auto-Baselining:** Automatically calibrates an ultra-lightweight ~1 KB `float32` centroid from the opening turns of any chat session. No manual baseline JSON required.
 * **Compaction Lifecycle Recovery:** Built-in listener (`drift_compact_reset`) that automatically clears historical accumulators and re-centers the baseline whenever conversation context is compressed.
 * **FastMCP Server Integration:** Runs natively as an MCP server (`drift-detector-mcp`) compatible with Claude Desktop, Cursor, and Antigravity.
-* **High-Throughput Core:** Benchmarked at **15,000+ turns/second** (< 0.07ms per evaluation) with a tiny memory footprint.
+* **High-Throughput Core:** Benchmarked at **50,000+ turns/second** (< 0.02ms per evaluation) with a tiny memory footprint.
 
 > **Scope Note:** Drift-Detector is a *semantic alignment* tool, not a fact checker. It detects topic wandering, mode shifts, and domain drift; it does not judge factual correctness within an on-topic response.
 
@@ -96,23 +93,34 @@ print(turn3.badge)  # "nominal"
 # Review session summary
 summary = detector.summary()
 print(summary)
-# {'turns': 3, 'drifted_turns': 0, 'drift_rate': 0.0, 'mean_distance': 0.8124, ...}
 ```
 
 ---
 
-## Benchmarks & Stress Tests
+## Benchmarks & Comparative Evaluation
 
-Validated in isolated sandbox stress test suites (`tests/test_stress.py`):
+Validated in automated benchmark suites (`experiments/comparative_benchmark.py` and `tests/test_benchmarks.py`):
 
-| Test Dimension | Workload | Result |
+### 1. Vector Math vs. LLM-as-a-Judge
+
+| Metric | Drift-Detector (Vector Math) | LLM-as-a-Judge (Prompt Evaluator) | Advantage |
+|---|---|---|---|
+| **Mean Turn Latency** | **0.020 ms (19.8 μs)** | ~850 ms | **42,000x faster** |
+| **P99 Turn Latency** | **0.029 ms (28.7 μs)** | ~1,450 ms | **50,000x lower jitter** |
+| **Cost per 10k Turns** | **$0.00 (100% Free)** | ~$2.85 USD | **Zero API spend** |
+| **Throughput** | **50,065 turns/sec** | 1.18 turns/sec | Real-time inline scoring |
+| **Memory Footprint** | **~1.0 KB (Float32 Centroid)** | Entire context window buffer | Constant-time $O(1)$ overhead |
+
+### 2. Detection Reliability & Stress Benchmarks
+
+| Evaluation Dimension | Workload / Scenario | Measured Result |
 |---|---|---|
-| **Throughput** | 10,000 sequential turns | **15,073 turns/sec** (0.663s total) |
-| **Memory Growth** | 10,000 turns | **2.1 MB** (Zero memory leaks) |
-| **Compaction Stability** | 100 consecutive resets | **100% stable** (Zero numerical drift) |
-| **Blip Forgiveness** | 50 burst tangents / 150 turns | **0 false alarms** (100% recovery) |
-| **Concurrency** | 50 parallel worker threads | **100% thread-safe** |
-| **Adversarial Inputs** | 100KB strings, emojis, CJK, SQLi | **0 crashes** |
+| **Blip Forgiveness (FPR)** | 50 transient single-turn tangents | **0.0% false alarms** (100% forgiven) |
+| **Sustained Drift (TPR)** | 50 multi-turn off-topic sequences | **100.0% true positive detection** (lag = 3.0 turns) |
+| **Baseline Separation ($\Delta$)** | On-task vs off-topic across dims 32–768 | **+0.25 to +0.27 distance margin** |
+| **Compaction Recovery** | Context compression event | **100% accumulator wipe & re-alignment** |
+| **Concurrency & Thread Safety** | 50 parallel worker threads | **100% thread-safe** (zero race conditions) |
+
 
 ---
 
